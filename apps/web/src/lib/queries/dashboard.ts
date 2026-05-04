@@ -1,67 +1,36 @@
 import { db } from "@mtk/database"
 import { teams, players, tournaments, matches } from "@mtk/database"
-import { eq, count, desc, and, sql, gte } from "drizzle-orm"
+import { eq, and, count, desc } from "drizzle-orm"
 
-export async function getDashboardStats(tenantId?: string) {
-  const now = new Date()
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-
-  const [teamCount] = await db
-    .select({ count: count() })
-    .from(teams)
-    .where(tenantId ? eq(teams.tenantId, tenantId) : undefined)
-
-  const [playerCount] = await db
-    .select({ count: count() })
-    .from(players)
-    .where(tenantId ? eq(players.tenantId, tenantId) : undefined)
-
-  const [tournamentCount] = await db
-    .select({ count: count() })
-    .from(tournaments)
-    .where(tenantId ? eq(tournaments.tenantId, tenantId) : undefined)
-
-  const [matchCount] = await db
-    .select({ count: count() })
-    .from(matches)
-    .where(tenantId ? eq(matches.tenantId, tenantId) : undefined)
-
-  const [activeMatchCount] = await db
-    .select({ count: count() })
-    .from(matches)
-    .where(
-      and(
-        eq(matches.status, "in_progress"),
-        tenantId ? eq(matches.tenantId, tenantId) : undefined
-      )
-    )
-
-  const recentMatches = await db
-    .select()
-    .from(matches)
-    .where(tenantId ? eq(matches.tenantId, tenantId) : undefined)
-    .orderBy(desc(matches.createdAt))
-    .limit(5)
-
-  const upcomingMatches = await db
-    .select()
-    .from(matches)
-    .where(
-      and(
-        eq(matches.status, "scheduled"),
-        tenantId ? eq(matches.tenantId, tenantId) : undefined
-      )
-    )
-    .orderBy(matches.scheduledAt)
-    .limit(5)
+export async function getDashboardStats(tenantId: string) {
+  const [
+    [{ totalTeams }],
+    [{ totalPlayers }],
+    [{ totalTournaments }],
+    [{ totalMatches }],
+    [{ liveMatches }],
+  ] = await Promise.all([
+    db.select({ totalTeams: count() }).from(teams).where(eq(teams.tenantId, tenantId)),
+    db.select({ totalPlayers: count() }).from(players).where(eq(players.tenantId, tenantId)),
+    db.select({ totalTournaments: count() }).from(tournaments).where(eq(tournaments.tenantId, tenantId)),
+    db.select({ totalMatches: count() }).from(matches).where(eq(matches.tenantId, tenantId)),
+    db.select({ liveMatches: count() }).from(matches).where(and(eq(matches.tenantId, tenantId), eq(matches.status, "live"))),
+  ])
 
   return {
-    totalTeams: teamCount?.count ?? 0,
-    totalPlayers: playerCount?.count ?? 0,
-    totalTournaments: tournamentCount?.count ?? 0,
-    totalMatches: matchCount?.count ?? 0,
-    activeMatches: activeMatchCount?.count ?? 0,
-    recentMatches,
-    upcomingMatches,
+    totalTeams: Number(totalTeams),
+    totalPlayers: Number(totalPlayers),
+    totalTournaments: Number(totalTournaments),
+    totalMatches: Number(totalMatches),
+    liveMatches: Number(liveMatches),
   }
+}
+
+export async function getRecentActivity(tenantId: string) {
+  const [recentMatches, recentTeams, recentPlayers] = await Promise.all([
+    db.select().from(matches).where(eq(matches.tenantId, tenantId)).orderBy(desc(matches.updatedAt)).limit(5),
+    db.select().from(teams).where(eq(teams.tenantId, tenantId)).orderBy(desc(teams.createdAt)).limit(3),
+    db.select().from(players).where(eq(players.tenantId, tenantId)).orderBy(desc(players.createdAt)).limit(3),
+  ])
+  return { recentMatches, recentTeams, recentPlayers }
 }

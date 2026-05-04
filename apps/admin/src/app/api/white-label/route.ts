@@ -85,16 +85,50 @@ export async function PATCH(request: NextRequest) {
 
     if (error) throw error;
 
-    // If approved, update tenant branding
-    if (status === "approved" && data) {
-      await supabase
-        .from("tenant_branding")
-        .upsert({
-          tenant_id: data.tenant_id,
-          hide_ssl_branding: data.hide_branding,
-          app_name: data.custom_app_name,
-          updated_at: new Date().toISOString(),
-        });
+    if (data) {
+      if (status === "approved") {
+        await supabase
+          .from("tenant_branding")
+          .upsert({
+            tenant_id: data.tenant_id,
+            hide_ssl_branding: data.hide_branding,
+            app_name: data.custom_app_name,
+            updated_at: new Date().toISOString(),
+          });
+
+        if (data.custom_domain) {
+          await supabase
+            .from("tenants")
+            .update({
+              custom_domain: data.custom_domain,
+              custom_domain_verified: false,
+              custom_domain_verified_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", data.tenant_id);
+        }
+      }
+
+      if (status === "revoked") {
+        await supabase
+          .from("tenant_branding")
+          .upsert({
+            tenant_id: data.tenant_id,
+            hide_ssl_branding: false,
+            app_name: null,
+            updated_at: new Date().toISOString(),
+          });
+
+        await supabase
+          .from("tenants")
+          .update({
+            custom_domain: null,
+            custom_domain_verified: false,
+            custom_domain_verified_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", data.tenant_id);
+      }
     }
 
     return NextResponse.json({ request: data });

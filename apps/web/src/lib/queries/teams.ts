@@ -1,28 +1,34 @@
 import { db } from "@mtk/database"
-import { teams } from "@mtk/database"
-import { eq, desc, ilike, count, and } from "drizzle-orm"
-
-export async function getTeams(tenantId?: string, search?: string) {
-  const conditions = []
-  if (tenantId) conditions.push(eq(teams.tenantId, tenantId))
-  if (search) conditions.push(ilike(teams.name, `%${search}%`))
-
-  return db
-    .select()
-    .from(teams)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(teams.createdAt))
-}
+import { teams, players, matches } from "@mtk/database"
+import { eq, and, or, desc, count } from "drizzle-orm"
 
 export async function getTeamById(id: string) {
   const [team] = await db.select().from(teams).where(eq(teams.id, id)).limit(1)
   return team ?? null
 }
 
-export async function getTeamCount(tenantId?: string) {
-  const [result] = await db
-    .select({ count: count() })
-    .from(teams)
-    .where(tenantId ? eq(teams.tenantId, tenantId) : undefined)
-  return result?.count ?? 0
+export async function getTeamWithRoster(id: string) {
+  const [team] = await db.select().from(teams).where(eq(teams.id, id)).limit(1)
+  if (!team) return null
+  const roster = await db.select().from(players).where(eq(players.teamId, id))
+  return { ...team, players: roster }
+}
+
+export async function getTeamPlayerCount(teamId: string): Promise<number> {
+  const [result] = await db.select({ total: count() }).from(players).where(eq(players.teamId, teamId))
+  return Number(result.total)
+}
+
+export async function getTeamMatchRecord(teamId: string) {
+  const allMatches = await db.select().from(matches)
+    .where(and(
+      or(eq(matches.teamAId, teamId), eq(matches.teamBId, teamId)),
+      eq(matches.status, "completed"),
+    ))
+
+  const wins = allMatches.filter((m) => m.winnerId === teamId).length
+  const losses = allMatches.filter((m) => m.winnerId !== null && m.winnerId !== teamId).length
+  const draws = allMatches.filter((m) => m.winnerId === null).length
+
+  return { played: allMatches.length, wins, losses, draws }
 }

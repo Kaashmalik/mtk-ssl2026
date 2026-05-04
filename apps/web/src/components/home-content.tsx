@@ -63,7 +63,11 @@ export function HomeContent() {
             <div className="flex flex-wrap gap-4">
               <SignedOut>
                 <SignInButton mode="modal">
-                  <Button size="xl" variant="gradient-shine" className="group">
+                  <Button
+                    size="xl"
+                    variant="gradient-shine"
+                    className="group shadow-[0_10px_30px_rgba(22,163,74,0.35)] text-white"
+                  >
                     Start Your League
                     <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                   </Button>
@@ -77,7 +81,11 @@ export function HomeContent() {
                   </Button>
                 </Link>
               </SignedIn>
-              <Button size="xl" variant="neo-glass" className="group">
+              <Button
+                size="xl"
+                variant="neo-glass"
+                className="group border border-white/25 bg-white/10 text-white backdrop-blur-md hover:bg-white/20"
+              >
                 <PlayCircle className="mr-2 h-5 w-5 group-hover:text-primary transition-colors" />
                 Watch Demo
               </Button>
@@ -133,7 +141,7 @@ export function HomeContent() {
             </div>
 
             {/* Decorative Background for cards */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-primary/10 to-blue-500/10 blur-3xl -z-10" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-linear-to-tr from-primary/10 to-blue-500/10 blur-3xl -z-10" />
           </MotionWrapper>
 
         </div>

@@ -62,7 +62,7 @@ export default async function SignInPage() {
     : null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800 relative overflow-hidden">
       {/* Dynamic Background Elements for fallback */}
       {!branding?.loginPageBackgroundUrl && (
         <>

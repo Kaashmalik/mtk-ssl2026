@@ -11,17 +11,17 @@ export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Get()
-  findAll() {
+  async findAll() {
     return this.tenantsService.findAll();
   }
 
   @Get(":id")
-  findOne(@Param("id") id: string) {
+  async findOne(@Param("id") id: string) {
     return this.tenantsService.findOne(id);
   }
 
   @Post()
-  create(@Body() createTenantDto: CreateTenantDto) {
+  async create(@Body() createTenantDto: CreateTenantDto) {
     return this.tenantsService.create(createTenantDto);
   }
 }

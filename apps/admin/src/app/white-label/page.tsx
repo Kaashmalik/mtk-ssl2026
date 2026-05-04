@@ -6,9 +6,9 @@ export default function WhiteLabelPage() {
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">White-Label Approval Queue</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Branding Approvals</h1>
           <p className="text-muted-foreground mt-2">
-            Review and approve white-label requests from enterprise customers.
+            Review and approve league branding, custom domains, and white-label requests.
           </p>
         </div>
         <WhiteLabelManagement />

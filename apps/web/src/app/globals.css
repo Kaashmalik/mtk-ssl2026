@@ -129,7 +129,7 @@
   --popover-foreground: oklch(0.12 0.02 260);
 
   /* Primary — Vivid Cricket Green */
-  --primary: oklch(0.55 0.18 150);
+  --primary: oklch(0.6 0.2 145);
   --primary-foreground: oklch(0.99 0 0);
 
   /* Secondary — Cricket Blue */
@@ -201,8 +201,8 @@
   --popover: oklch(0.17 0.015 260);
   --popover-foreground: oklch(0.96 0.005 200);
 
-  /* Neon Green for Dark — slightly desaturated for eye comfort */
-  --primary: oklch(0.68 0.14 150);
+  /* Neon Green for Dark — vibrant and clear */
+  --primary: oklch(0.7 0.16 145);
   --primary-foreground: oklch(0.1 0.04 150);
 
   --secondary: oklch(0.22 0.025 260);
@@ -252,6 +252,8 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
     background-image: 
       radial-gradient(ellipse at 15% 50%, oklch(0.92 0.03 150 / 0.12) 0%, transparent 30%),
       radial-gradient(ellipse at 85% 20%, oklch(0.94 0.02 240 / 0.08) 0%, transparent 30%),
@@ -264,6 +266,12 @@
       radial-gradient(ellipse at 85% 20%, oklch(0.18 0.04 260 / 0.1) 0%, transparent 30%),
       radial-gradient(ellipse at 50% 90%, oklch(0.2 0.05 300 / 0.06) 0%, transparent 20%);
   }
+
+  /* Global Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-full); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
 
   /* Reduced motion support */
   @media (prefers-reduced-motion: reduce) {

@@ -12,7 +12,7 @@ const navigation = [
   { name: "Announcements", href: "/announcements", icon: "📢" },
   { name: "Feature Flags", href: "/feature-flags", icon: "🚩" },
   { name: "Commission", href: "/commission", icon: "💳" },
-  { name: "White-Label", href: "/white-label", icon: "🎨" },
+  { name: "Branding Approvals", href: "/white-label", icon: "🎨" },
   { name: "System Health", href: "/system-health", icon: "⚡" },
 ];
 
@@ -22,7 +22,7 @@ export function Sidebar() {
   return (
     <div className="flex h-full w-64 flex-col border-r border-border/40 bg-background/80 backdrop-blur-xl">
       <div className="flex h-16 items-center border-b border-border/40 px-6">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+        <h1 className="text-xl font-bold bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">
           SSL Admin
         </h1>
       </div>

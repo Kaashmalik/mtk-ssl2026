@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@mtk/
 import { Input } from "@mtk/ui";
 import { Label } from "@mtk/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@mtk/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@mtk/ui/components/ui/select";
 import { CheckCircle2, XCircle, Loader2, Globe, Mail, Smartphone, Palette } from "lucide-react";
 // Simple toast implementation
 const toast = {
@@ -60,12 +61,22 @@ interface VerificationStatus {
   dkimSelector?: string;
 }
 
+interface LeagueOption {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  customDomain?: string | null;
+}
+
 export function BrandingSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dnsVerification, setDnsVerification] = useState<VerificationStatus | null>(null);
   const [emailVerification, setEmailVerification] = useState<VerificationStatus | null>(null);
   const [sslStatus, setSslStatus] = useState<{ status: string } | null>(null);
+  const [leagues, setLeagues] = useState<LeagueOption[]>([]);
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string>("");
 
   const form = useForm<BrandingFormData>({
     resolver: zodResolver(brandingSchema),
@@ -79,36 +90,60 @@ export function BrandingSettings() {
   });
 
   useEffect(() => {
-    loadBrandingSettings();
+    loadLeagues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadBrandingSettings() {
+  useEffect(() => {
+    if (!selectedLeagueId) return;
+    setDnsVerification(null);
+    setEmailVerification(null);
+    setSslStatus(null);
+    loadBrandingSettings(selectedLeagueId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLeagueId]);
+
+  async function loadLeagues() {
     try {
-      const response = await fetch("/api/settings/branding");
+      const response = await fetch("/api/admin/leagues");
+      if (!response.ok) throw new Error("Failed to load leagues");
+      const data = await response.json();
+      const list = data.leagues || [];
+      setLeagues(list);
+      if (list.length > 0) {
+        setSelectedLeagueId(list[0].id);
+      }
+    } catch (error) {
+      console.error("Failed to load leagues:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadBrandingSettings(tenantId: string) {
+    try {
+      const response = await fetch(`/api/settings/branding?tenantId=${tenantId}`);
       if (response.ok) {
         const data = await response.json();
         form.reset(data);
         
         // Load verification statuses
         if (data.customDomain) {
-          loadDnsVerification(data.customDomain);
-          loadSslStatus(data.customDomain);
+          loadDnsVerification(tenantId, data.customDomain);
+          loadSslStatus(tenantId, data.customDomain);
         }
         if (data.emailSenderAddress) {
-          loadEmailVerification(data.emailSenderAddress);
+          loadEmailVerification(tenantId, data.emailSenderAddress);
         }
       }
     } catch (error) {
       console.error("Failed to load branding settings:", error);
-    } finally {
-      setLoading(false);
     }
   }
 
-  async function loadDnsVerification(domain: string) {
+  async function loadDnsVerification(tenantId: string, domain: string) {
     try {
-      const response = await fetch(`/api/dns/verify?domain=${domain}`);
+      const response = await fetch(`/api/dns/verify?domain=${domain}&tenantId=${tenantId}`);
       if (response.ok) {
         const data = await response.json();
         setDnsVerification(data);
@@ -118,9 +153,9 @@ export function BrandingSettings() {
     }
   }
 
-  async function loadSslStatus(domain: string) {
+  async function loadSslStatus(tenantId: string, domain: string) {
     try {
-      const response = await fetch(`/api/ssl/status?domain=${domain}`);
+      const response = await fetch(`/api/ssl/status?domain=${domain}&tenantId=${tenantId}`);
       if (response.ok) {
         const data = await response.json();
         setSslStatus(data);
@@ -130,10 +165,10 @@ export function BrandingSettings() {
     }
   }
 
-  async function loadEmailVerification(email: string) {
+  async function loadEmailVerification(tenantId: string, email: string) {
     try {
       const domain = email.split("@")[1];
-      const response = await fetch(`/api/email/verify?domain=${domain}`);
+      const response = await fetch(`/api/email/verify?domain=${domain}&tenantId=${tenantId}`);
       if (response.ok) {
         const data = await response.json();
         setEmailVerification(data);
@@ -149,7 +184,7 @@ export function BrandingSettings() {
       const response = await fetch("/api/settings/branding", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, tenantId: selectedLeagueId }),
       });
 
       if (!response.ok) {
@@ -160,11 +195,11 @@ export function BrandingSettings() {
       
       // Reload verification statuses if domain/email changed
       if (data.customDomain) {
-        loadDnsVerification(data.customDomain);
-        loadSslStatus(data.customDomain);
+        loadDnsVerification(selectedLeagueId, data.customDomain);
+        loadSslStatus(selectedLeagueId, data.customDomain);
       }
       if (data.emailSenderAddress) {
-        loadEmailVerification(data.emailSenderAddress);
+        loadEmailVerification(selectedLeagueId, data.emailSenderAddress);
       }
     } catch (error) {
       toast.error("Failed to save branding settings");
@@ -179,7 +214,7 @@ export function BrandingSettings() {
       const response = await fetch("/api/dns/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain }),
+        body: JSON.stringify({ domain, tenantId: selectedLeagueId }),
       });
 
       if (!response.ok) {
@@ -201,7 +236,7 @@ export function BrandingSettings() {
       const response = await fetch("/api/email/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain, senderEmail: email }),
+        body: JSON.stringify({ domain, senderEmail: email, tenantId: selectedLeagueId }),
       });
 
       if (!response.ok) {
@@ -225,11 +260,40 @@ export function BrandingSettings() {
     );
   }
 
+  if (!selectedLeagueId) {
+    return (
+      <div className="rounded-2xl border border-border/40 bg-muted/20 p-6">
+        <h2 className="text-lg font-semibold">No leagues found</h2>
+        <p className="text-sm text-muted-foreground mt-2">Create a league first to configure branding.</p>
+      </div>
+    );
+  }
+
   const customDomain = form.watch("customDomain");
   const emailSenderAddress = form.watch("emailSenderAddress");
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <Card className="border-border/50">
+        <CardHeader>
+          <CardTitle className="text-base">Select league</CardTitle>
+          <CardDescription>All branding and system requirements are managed by super admin.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select value={selectedLeagueId} onValueChange={setSelectedLeagueId}>
+            <SelectTrigger className="max-w-md">
+              <SelectValue placeholder="Select a league" />
+            </SelectTrigger>
+            <SelectContent>
+              {leagues.map((league) => (
+                <SelectItem key={league.id} value={league.id}>
+                  {league.name} • {league.slug}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
       <Tabs defaultValue="branding" className="space-y-6">
         <TabsList>
           <TabsTrigger value="branding">

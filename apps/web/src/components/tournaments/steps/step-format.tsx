@@ -71,7 +71,7 @@ export function StepFormat({ form }: StepFormatProps) {
               >
                 <CardContent className="p-6">
                   <div
-                    className={`w-16 h-16 rounded-full bg-gradient-to-br ${format.color} flex items-center justify-center mb-4 mx-auto`}
+                    className={`w-16 h-16 rounded-full bg-linear-to-br ${format.color} flex items-center justify-center mb-4 mx-auto`}
                   >
                     <Icon className="w-8 h-8 text-white" />
                   </div>

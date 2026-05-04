@@ -59,15 +59,15 @@ export function StatCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: delay * 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
       className={cn(
-        "relative overflow-hidden rounded-2xl border bg-card p-6 shadow-sm transition-all duration-300",
-        "hover:shadow-lg hover:-translate-y-0.5",
+        "relative overflow-hidden rounded-2xl border bg-card p-6 shadow-sm transition-all duration-300 group",
+        "hover:shadow-md hover:-translate-y-1",
         className
       )}
     >
       {/* Accent gradient background */}
       {accentColor && (
         <div 
-          className="absolute inset-0 opacity-[0.04]"
+          className="absolute inset-0 opacity-[0.04] group-hover:opacity-[0.08] transition-opacity duration-300"
           style={{ background: `radial-gradient(circle at top right, ${accentColor}, transparent 70%)` }}
         />
       )}

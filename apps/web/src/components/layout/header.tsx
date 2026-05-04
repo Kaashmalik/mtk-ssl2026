@@ -60,7 +60,7 @@ export function Header() {
 
   return (
     <>
-      <header className="flex h-14 items-center gap-4 border-b bg-card/50 px-4 lg:h-[60px] lg:px-6 glass-panel-subtle sticky top-0 z-30">
+      <header className="flex h-14 items-center gap-4 border-b border-border/50 bg-background/60 backdrop-blur-xl px-4 lg:h-[60px] lg:px-6 sticky top-0 z-30 transition-all duration-300">
         {/* Mobile menu */}
         <Sheet>
           <SheetTrigger asChild>

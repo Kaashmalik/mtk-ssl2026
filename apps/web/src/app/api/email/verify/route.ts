@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@mtk/database";
 import { tenants, emailDomainVerifications } from "@mtk/database";
 import { eq, and } from "drizzle-orm";
+import { isSuperAdmin } from "@/lib/super-admin";
 
 /**
  * GET - Check email domain verification status
@@ -14,18 +15,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const isAdmin = await isSuperAdmin();
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const domain = searchParams.get("domain");
+    const tenantId = searchParams.get("tenantId");
 
-    if (!domain) {
-      return NextResponse.json({ error: "Domain required" }, { status: 400 });
+    if (!domain || !tenantId) {
+      return NextResponse.json({ error: "Domain and tenantId required" }, { status: 400 });
     }
 
     // Get tenant
     const tenant = await db
       .select()
       .from(tenants)
-      .where(eq(tenants.ownerId, userId))
+      .where(eq(tenants.id, tenantId))
       .limit(1);
 
     if (tenant.length === 0) {
@@ -93,12 +100,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { domain, senderEmail } = body;
+    const isAdmin = await isSuperAdmin();
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-    if (!domain || !senderEmail) {
+    const body = await request.json();
+    const { domain, senderEmail, tenantId } = body;
+
+    if (!domain || !senderEmail || !tenantId) {
       return NextResponse.json(
-        { error: "Domain and sender email required" },
+        { error: "Domain, sender email, and tenantId required" },
         { status: 400 }
       );
     }
@@ -107,7 +119,7 @@ export async function POST(request: NextRequest) {
     const tenant = await db
       .select()
       .from(tenants)
-      .where(eq(tenants.ownerId, userId))
+      .where(eq(tenants.id, tenantId))
       .limit(1);
 
     if (tenant.length === 0) {

@@ -3,30 +3,75 @@
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
 import { db } from "@mtk/database"
-import { players } from "@mtk/database"
-import { eq } from "drizzle-orm"
+import { players, teams } from "@mtk/database"
+import { eq, and, ilike, desc, asc, count } from "drizzle-orm"
 import { z } from "zod"
+import { getMyTenant } from "@/app/actions/tenants"
+
+// ─── Validation Schemas ───────────────────────────────────────
 
 const createPlayerSchema = z.object({
-  name: z.string().min(2, "Player name must be at least 2 characters").max(100),
-  role: z.enum(["batsman", "bowler", "all_rounder", "wicketkeeper"]).optional(),
-  battingStyle: z.enum(["right_hand", "left_hand"]).optional(),
-  bowlingStyle: z.enum(["right_arm_fast", "right_arm_medium", "left_arm_fast", "left_arm_medium", "right_arm_spin", "left_arm_spin"]).optional(),
-  jerseyNumber: z.number().int().min(0).max(999).optional(),
-  teamId: z.string().uuid().optional(),
+  name: z.string().min(2, "Name must be at least 2 characters").max(100),
+  tenantId: z.string().uuid("Invalid tenant ID").optional(),
+  teamId: z.string().uuid("Invalid team ID").optional().nullable(),
+  role: z.enum(["batsman", "bowler", "all_rounder", "wicket_keeper", "wicket_keeper_batsman"]).optional().nullable(),
+  battingStyle: z.enum(["right", "left"]).optional().nullable(),
+  bowlingStyle: z.enum(["right_arm_fast", "right_arm_medium", "right_arm_spin", "left_arm_fast", "left_arm_medium", "left_arm_spin"]).optional().nullable(),
+  jerseyNumber: z.number().int().min(0).max(999).optional().nullable(),
+  photoUrl: z.string().url("Invalid photo URL").optional().nullable(),
+  dateOfBirth: z.string().optional().nullable(),
+  phone: z.string().max(20).optional().nullable(),
+  email: z.string().email("Invalid email").optional().nullable(),
+  nationality: z.string().max(100).optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  heightCm: z.number().int().min(100).max(250).optional().nullable(),
+  weightKg: z.number().int().min(30).max(200).optional().nullable(),
+  biography: z.string().max(2000).optional().nullable(),
+  status: z.enum(["active", "injured", "retired", "suspended", "inactive"]).optional(),
+})
+
+const updatePlayerSchema = createPlayerSchema.partial().omit({ tenantId: true })
+
+const playerFiltersSchema = z.object({
   tenantId: z.string().uuid().optional(),
-  photoUrl: z.string().url().optional(),
-  dateOfBirth: z.string().datetime().optional(),
-  phone: z.string().optional(),
+  teamId: z.string().uuid().optional(),
+  role: z.enum(["batsman", "bowler", "all_rounder", "wicket_keeper", "wicket_keeper_batsman"]).optional(),
+  status: z.enum(["active", "injured", "retired", "suspended", "inactive"]).optional(),
+  search: z.string().optional(),
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(100).default(20),
+  sortBy: z.enum(["name", "createdAt", "jerseyNumber"]).default("name"),
+  sortOrder: z.enum(["asc", "desc"]).default("asc"),
 })
 
 export type CreatePlayerInput = z.infer<typeof createPlayerSchema>
+export type UpdatePlayerInput = z.infer<typeof updatePlayerSchema>
+export type PlayerFilters = z.infer<typeof playerFiltersSchema>
+
+async function requireTenant() {
+  const tenant = await getMyTenant()
+  if (!tenant) throw new Error("Tenant not found")
+  return tenant
+}
+
+// ─── Actions ──────────────────────────────────────────────────
 
 export async function createPlayer(input: CreatePlayerInput) {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
+  const tenant = await requireTenant()
+  const validated = createPlayerSchema.parse({
+    ...input,
+    tenantId: input.tenantId ?? tenant.id,
+  })
+  if (validated.tenantId !== tenant.id) throw new Error("Invalid tenant")
 
-  const validated = createPlayerSchema.parse(input)
+  if (validated.teamId) {
+    const [team] = await db.select().from(teams)
+      .where(and(eq(teams.id, validated.teamId), eq(teams.tenantId, tenant.id)))
+      .limit(1)
+    if (!team) throw new Error("Team not found")
+  }
 
   const [player] = await db.insert(players).values({
     ...validated,
@@ -38,14 +83,31 @@ export async function createPlayer(input: CreatePlayerInput) {
   return { success: true, player }
 }
 
-export async function updatePlayer(id: string, input: Partial<CreatePlayerInput>) {
+export async function updatePlayer(id: string, input: UpdatePlayerInput) {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
+  const tenant = await requireTenant()
+
+  const validated = updatePlayerSchema.parse(input)
+
+  // Remove undefined values to avoid overwriting with null
+  const cleanData = Object.fromEntries(
+    Object.entries(validated).filter(([, v]) => v !== undefined)
+  )
+
+  if (cleanData.teamId) {
+    const [team] = await db.select().from(teams)
+      .where(and(eq(teams.id, cleanData.teamId as string), eq(teams.tenantId, tenant.id)))
+      .limit(1)
+    if (!team) throw new Error("Team not found")
+  }
 
   const [player] = await db.update(players).set({
-    ...input,
+    ...cleanData,
     updatedAt: new Date(),
-  }).where(eq(players.id, id)).returning()
+  }).where(and(eq(players.id, id), eq(players.tenantId, tenant.id))).returning()
+
+  if (!player) throw new Error("Player not found")
 
   revalidatePath("/dashboard/players")
   revalidatePath(`/dashboard/players/${id}`)
@@ -55,10 +117,63 @@ export async function updatePlayer(id: string, input: Partial<CreatePlayerInput>
 export async function deletePlayer(id: string) {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
+  const tenant = await requireTenant()
 
-  await db.delete(players).where(eq(players.id, id))
+  await db.delete(players).where(and(eq(players.id, id), eq(players.tenantId, tenant.id)))
 
   revalidatePath("/dashboard/players")
   revalidatePath("/dashboard")
   return { success: true }
+}
+
+export async function getPlayer(id: string) {
+  const { userId } = await auth()
+  if (!userId) throw new Error("Unauthorized")
+  const tenant = await requireTenant()
+  const [player] = await db.select().from(players)
+    .where(and(eq(players.id, id), eq(players.tenantId, tenant.id)))
+    .limit(1)
+  return player ?? null
+}
+
+export async function getPlayers(filters: PlayerFilters) {
+  const tenant = await requireTenant()
+  const validated = playerFiltersSchema.parse({ ...filters, tenantId: tenant.id })
+  const { teamId, role, status, search, page, pageSize, sortBy, sortOrder } = validated
+  const offset = (page - 1) * pageSize
+
+  // Build where conditions
+  const conditions = [eq(players.tenantId, tenant.id)]
+  if (teamId) conditions.push(eq(players.teamId, teamId))
+  if (role) conditions.push(eq(players.role, role))
+  if (status) conditions.push(eq(players.status, status))
+  if (search) conditions.push(ilike(players.name, `%${search}%`))
+
+  const whereClause = and(...conditions)
+
+  // Sort
+  const orderFn = sortOrder === "desc" ? desc : asc
+  const orderColumn = sortBy === "name" ? players.name
+    : sortBy === "jerseyNumber" ? players.jerseyNumber
+    : players.createdAt
+
+  // Execute query + count in parallel
+  const [data, [{ total }]] = await Promise.all([
+    db.select().from(players)
+      .where(whereClause)
+      .orderBy(orderFn(orderColumn))
+      .limit(pageSize)
+      .offset(offset),
+    db.select({ total: count() }).from(players).where(whereClause),
+  ])
+
+  return {
+    data,
+    pagination: {
+      page,
+      pageSize,
+      total: Number(total),
+      totalPages: Math.ceil(Number(total) / pageSize),
+    },
+  }
 }

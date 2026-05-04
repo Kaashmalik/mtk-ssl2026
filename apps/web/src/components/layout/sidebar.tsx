@@ -109,15 +109,21 @@ export function Sidebar() {
                     key={item.name}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200",
-                      "hover:bg-primary/8 hover:text-foreground",
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 relative group overflow-hidden",
+                      "hover:bg-primary/5 hover:text-foreground",
                       isActive
-                        ? "bg-primary/10 text-primary font-medium shadow-sm"
+                        ? "text-primary font-medium shadow-sm bg-gradient-to-r from-primary/15 to-primary/5"
                         : "text-muted-foreground"
                     )}
                     title={collapsed ? item.name : undefined}
                   >
-                    <item.icon className={cn("h-4 w-4 shrink-0", isActive && "text-primary")} />
+                    {isActive && (
+                      <motion.div 
+                        layoutId="activeNavIndicator"
+                        className="absolute left-0 top-0 w-1 h-full bg-primary rounded-r-full" 
+                      />
+                    )}
+                    <item.icon className={cn("h-4 w-4 shrink-0 relative z-10 transition-transform group-hover:scale-110", isActive && "text-primary")} />
                     <AnimatePresence>
                       {!collapsed && (
                         <motion.div

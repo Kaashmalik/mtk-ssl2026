@@ -1,13 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useParams } from "next/navigation"
 import { useMatchStore } from "@/stores/use-match-store"
 import { useSocket } from "@/hooks/use-socket"
 import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
 import { Button } from "@mtk/ui/components/ui/button"
 import { Badge } from "@mtk/ui/components/ui/badge"
 
-export default function LiveScoringInterface({ matchId }: { matchId: string }) {
+export default function LiveScoringInterface() {
+  const params = useParams();
+  const matchId = params.id as string;
   const store = useMatchStore()
   const { sendMessage } = useSocket({ room: matchId })
   
@@ -37,7 +40,7 @@ export default function LiveScoringInterface({ matchId }: { matchId: string }) {
   return (
     <div className="max-w-md mx-auto space-y-4 pb-20">
        {/* Score Board */}
-       <Card variant="neo" className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+      <Card variant="neo" className="bg-linear-to-br from-primary/10 to-primary/5 border-primary/20">
          <CardContent className="pt-6">
             <div className="flex justify-between items-center mb-4">
               <span className="font-semibold text-lg">Batting Team</span>

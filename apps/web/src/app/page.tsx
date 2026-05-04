@@ -1,6 +1,6 @@
 import { HomeContent } from "@/components/home-content";
 
-export default function HomePage() {
+export default async function HomePage() {
   return <HomeContent />;
 }
 

@@ -9,6 +9,7 @@ import { Skeleton } from "@mtk/ui/components/ui/skeleton"
 import { MotionWrapper, MotionItem } from "@mtk/ui/components/ui/motion-wrapper"
 import { Badge } from "@mtk/ui/components/ui/badge"
 import { Plus, Trophy, Users, CalendarDays, ArrowRight, Sword, Radio, TrendingUp, Zap, Clock } from "lucide-react"
+import { getMyTenant } from "@/app/actions/tenants"
 
 // Dashboard Stats Component
 async function DashboardStats() {
@@ -93,13 +94,14 @@ function LiveMatchesBanner() {
 
   return (
     <MotionWrapper variant="fadeInUp" delay={0.2}>
-      <Card className="border-live/20 bg-gradient-to-r from-live/5 via-transparent to-live/5 overflow-hidden relative">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-live via-live/60 to-transparent" />
-        <CardHeader className="pb-3">
+      <Card className="border-live/20 bg-linear-to-r from-live/5 via-transparent to-live/5 overflow-hidden relative shadow-[0_0_20px_-5px_var(--color-live)]">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,var(--color-live)_0%,transparent_70%)] opacity-10 mix-blend-screen pointer-events-none" />
+        <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-live via-live/80 to-transparent" />
+        <CardHeader className="pb-3 relative z-10">
           <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
+            <span className="relative flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-live opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-live" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-live shadow-[0_0_10px_var(--color-live)]" />
             </span>
             <CardTitle className="text-base font-semibold">Live Now</CardTitle>
             <Badge variant="outline" className="text-live border-live/30 text-xs">
@@ -194,17 +196,19 @@ function UpcomingMatches() {
       <CardContent>
         <div className="space-y-4">
           {upcoming.map((match, i) => (
-            <div key={match.id} className="flex items-start gap-3">
-              <div className="flex flex-col items-center">
-                <div className="h-2 w-2 rounded-full bg-primary mt-2" />
-                {i < upcoming.length - 1 && <div className="w-px h-full bg-border min-h-[40px]" />}
+            <MotionWrapper key={match.id} variant="fadeInRight" delay={i * 0.1}>
+              <div className="flex items-start gap-3 relative group">
+                <div className="absolute left-[3px] top-4 -bottom-4 w-px bg-border group-last:hidden" />
+                <div className="h-2 w-2 rounded-full bg-info/60 mt-1.5 shrink-0 relative z-10 ring-4 ring-background group-hover:bg-info transition-colors" />
+                <div className="flex-1 pb-2">
+                  <p className="font-medium text-sm">{match.team1} <span className="text-muted-foreground text-xs mx-1">vs</span> {match.team2}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="outline" className="text-[10px] font-normal bg-card/50">{match.time}</Badge>
+                    <span className="text-xs text-muted-foreground truncate">{match.venue}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1 pb-2">
-                <p className="font-medium text-sm">{match.team1} vs {match.team2}</p>
-                <p className="text-xs text-muted-foreground">{match.time}</p>
-                <p className="text-xs text-muted-foreground">{match.venue}</p>
-              </div>
-            </div>
+            </MotionWrapper>
           ))}
         </div>
       </CardContent>
@@ -232,13 +236,16 @@ function RecentActivity() {
       <CardContent>
         <div className="space-y-4">
           {activities.map((activity, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 mt-2 shrink-0" />
-              <div>
-                <p className="text-sm">{activity.message}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{activity.time}</p>
+            <MotionWrapper key={i} variant="fadeInUp" delay={i * 0.1}>
+              <div className="flex items-start gap-3 relative group">
+                <div className="absolute left-[3px] top-4 -bottom-4 w-px bg-border group-last:hidden" />
+                <div className="h-2 w-2 rounded-full bg-primary/60 mt-1.5 shrink-0 relative z-10 ring-4 ring-background group-hover:bg-primary transition-colors" />
+                <div className="pb-2">
+                  <p className="text-sm font-medium">{activity.message}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{activity.time}</p>
+                </div>
               </div>
-            </div>
+            </MotionWrapper>
           ))}
         </div>
       </CardContent>
@@ -251,6 +258,11 @@ export default async function DashboardPage() {
 
   if (!userId) {
     redirect("/")
+  }
+
+  const tenant = await getMyTenant()
+  if (!tenant) {
+    redirect("/dashboard/league/setup")
   }
 
   return (

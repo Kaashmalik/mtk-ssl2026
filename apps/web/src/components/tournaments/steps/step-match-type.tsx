@@ -85,7 +85,7 @@ export function StepMatchType({ form }: StepMatchTypeProps) {
               >
                 <CardContent className="p-6">
                   <div
-                    className={`w-16 h-16 rounded-full bg-gradient-to-br ${type.color} flex items-center justify-center mb-4 mx-auto`}
+                    className={`w-16 h-16 rounded-full bg-linear-to-br ${type.color} flex items-center justify-center mb-4 mx-auto`}
                   >
                     <Icon className="w-8 h-8 text-white" />
                   </div>

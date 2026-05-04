@@ -3,20 +3,31 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@mtk/database";
 import { tenants, tenantBranding } from "@mtk/database";
 import { eq } from "drizzle-orm";
+import { isSuperAdmin } from "@/lib/super-admin";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get tenant for current user
+    const isAdmin = await isSuperAdmin();
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const tenantId = request.nextUrl.searchParams.get("tenantId");
+    if (!tenantId) {
+      return NextResponse.json({ error: "tenantId is required" }, { status: 400 });
+    }
+
+    // Get tenant for selected league
     const tenant = await db
       .select()
       .from(tenants)
-      .where(eq(tenants.ownerId, userId))
+      .where(eq(tenants.id, tenantId))
       .limit(1);
 
     if (tenant.length === 0) {
@@ -51,13 +62,22 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const isAdmin = await isSuperAdmin();
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await request.json();
 
-    // Get tenant for current user
+    if (!body.tenantId) {
+      return NextResponse.json({ error: "tenantId is required" }, { status: 400 });
+    }
+
+    // Get tenant for selected league
     const tenant = await db
       .select()
       .from(tenants)
-      .where(eq(tenants.ownerId, userId))
+      .where(eq(tenants.id, body.tenantId))
       .limit(1);
 
     if (tenant.length === 0) {
