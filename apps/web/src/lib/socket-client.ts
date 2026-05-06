@@ -72,9 +72,42 @@ function leaveMatchRoom(matchId: string): void {
   }
 }
 
+export interface BallRecordedEvent {
+  ballId: string;
+  matchId: string;
+  inningsId: string;
+  over: number;
+  ball: number;
+  runs: number;
+  batsmanId: string;
+  bowlerId: string;
+  timestamp: string;
+  extras?: {
+    type: "wide" | "noball" | "bye" | "legbye";
+    runs: number;
+  };
+  wicket?: {
+    type: string;
+    playerId: string;
+  };
+}
+
+export interface MatchStateEvent {
+  matchId: string;
+  innings: {
+    id: string;
+    teamId: string;
+    totalRuns: number;
+    totalWickets: number;
+    overs: number;
+    balls: number;
+  };
+  currentOver: string[];
+}
+
 export function subscribeToMatch(matchId: string, callbacks: {
-  onBallRecorded?: (data: any) => void;
-  onMatchState?: (data: any) => void;
+  onBallRecorded?: (data: BallRecordedEvent) => void;
+  onMatchState?: (data: MatchStateEvent) => void;
 }): () => void {
   connectListeners++;
   const unsubscribe = joinMatchRoom(matchId);

@@ -6,6 +6,23 @@ import { Search, Trophy, Users, CalendarDays, Settings } from "lucide-react"
 
 import { cn } from "../../lib/utils"
 
+// Re-export cmdk components
+export const CommandDialog = Command
+export const CommandInput = Command.Input
+export const CommandList = Command.List
+export const CommandEmpty = Command.Empty
+export const CommandGroup = Command.Group
+export const CommandItem = Command.Item
+
+// CommandShortcut component for keyboard shortcuts
+export function CommandShortcut({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <span className={cn("ml-auto text-xs tracking-widest text-muted-foreground", className)}>
+      {children}
+    </span>
+  )
+}
+
 interface CommandPaletteProps {
   router?: { push: (path: string) => void }
 }
