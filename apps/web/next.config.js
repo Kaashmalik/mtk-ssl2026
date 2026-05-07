@@ -9,12 +9,8 @@ const { withSentryConfig } = require("@sentry/nextjs");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
   reactStrictMode: true,
   transpilePackages: ["@mtk/ui", "@mtk/database"],
-  experimental: {
-    instrumentationHook: true,
-  },
   eslint: {
     ignoreDuringBuilds: false,
   },
