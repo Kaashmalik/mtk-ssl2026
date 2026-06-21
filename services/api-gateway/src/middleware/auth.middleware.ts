@@ -1,6 +1,8 @@
-import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, NestMiddleware, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response, NextFunction } from 'express';
+import { ClientGrpc } from '@nestjs/microservices';
+import { firstValueFrom, Observable } from 'rxjs';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -12,8 +14,24 @@ interface AuthenticatedRequest extends Request {
   tenantId?: string;
 }
 
+interface ValidateTokenResponse {
+  valid: boolean;
+  user?: {
+    id: string;
+    email: string;
+    tenant_ids: string[];
+    roles: string[];
+  };
+  error?: string;
+}
+
+interface AuthServiceGrpc {
+  validateToken(data: { token: string; tenant_id?: string }): Observable<ValidateTokenResponse>;
+}
+
 @Injectable()
-export class AuthMiddleware implements NestMiddleware {
+export class AuthMiddleware implements NestMiddleware, OnModuleInit {
+  private authService: AuthServiceGrpc;
   private readonly publicPaths = [
     '/api/v1/health',
     '/api/v1/auth/login',
@@ -22,7 +40,14 @@ export class AuthMiddleware implements NestMiddleware {
     '/api/v1/public',
   ];
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject('AUTH_SERVICE') private readonly client: ClientGrpc,
+  ) {}
+
+  onModuleInit() {
+    this.authService = this.client.getService<AuthServiceGrpc>('AuthService');
+  }
 
   async use(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     // Skip auth for public paths
@@ -52,8 +77,8 @@ export class AuthMiddleware implements NestMiddleware {
       req.headers['x-user-roles'] = user.roles.join(',');
       
       next();
-    } catch {
-      throw new UnauthorizedException('Invalid or expired token');
+    } catch (err) {
+      throw new UnauthorizedException(err instanceof Error ? err.message : 'Invalid or expired token');
     }
   }
 
@@ -82,16 +107,37 @@ export class AuthMiddleware implements NestMiddleware {
     tenantId: string;
     roles: string[];
   }> {
-    // TODO: Call auth-service via gRPC
-    // For now, decode JWT (in production, use proper verification)
-    const payload = this.decodeJwt(token);
-    
-    return {
-      id: String(payload.sub || ''),
-      email: String(payload.email || ''),
-      tenantId: tenantId || String(payload.tenantId || 'default'),
-      roles: Array.isArray(payload.roles) ? payload.roles as string[] : ['user'],
-    };
+    try {
+      const response = await firstValueFrom(
+        this.authService.validateToken({ token, tenant_id: tenantId }),
+      );
+      
+      if (response && response.valid && response.user) {
+        return {
+          id: response.user.id,
+          email: response.user.email,
+          tenantId: response.user.tenant_ids?.[0] || tenantId || 'default',
+          roles: response.user.roles || ['user'],
+        };
+      }
+      
+      throw new Error(response?.error || 'Invalid credentials');
+    } catch (error) {
+      // In development mode, fallback to decoding the JWT locally if auth service is down/unavailable
+      if (this.configService.get('NODE_ENV') === 'development') {
+        console.warn('gRPC Auth Service unavailable, falling back to local JWT decode');
+        const payload = this.decodeJwt(token);
+        
+        return {
+          id: String(payload.sub || ''),
+          email: String(payload.email || ''),
+          tenantId: tenantId || String(payload.tenantId || 'default'),
+          roles: Array.isArray(payload.roles) ? payload.roles as string[] : ['user'],
+        };
+      }
+      
+      throw new UnauthorizedException(error instanceof Error ? error.message : 'Authentication service unavailable');
+    }
   }
 
   private decodeJwt(token: string): Record<string, unknown> {
@@ -106,3 +152,4 @@ export class AuthMiddleware implements NestMiddleware {
     }
   }
 }
+

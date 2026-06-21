@@ -19,6 +19,8 @@ export * from "./match-balls";
 export * from "./scorecards";
 export * from "./player-season-stats";
 export * from "./player-ids";
+export * from "./scoring-events";
+export * from "./scorecard-projections";
 
 // Fan Engagement
 export * from "./fan-follows";
@@ -30,9 +32,11 @@ export * from "./league-registrations";
 export * from "./documents";
 export * from "./media";
 export * from "./announcements";
+export * from "./commentary-events";
 
 // Billing & Subscriptions
 export * from "./subscriptions";
+export * from "./subscription-requests";
 export * from "./fantasy-leagues";
 
 // System & Admin
@@ -45,3 +49,5 @@ export * from "./white-label-requests";
 export * from "./dns-verifications";
 export * from "./ssl-certificates";
 export * from "./email-domain-verifications";
+export * from "./waitlist";
+

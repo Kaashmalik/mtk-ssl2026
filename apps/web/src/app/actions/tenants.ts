@@ -3,9 +3,11 @@
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
 import { db } from "@mtk/database"
-import { tenants } from "@mtk/database"
-import { eq } from "drizzle-orm"
+import { tenants, tenantBranding, subscriptions, users } from "@mtk/database"
+import { eq, sql } from "drizzle-orm"
 import { z } from "zod"
+import { withAuth } from "./action-guard"
+
 
 const createTenantSchema = z.object({
   name: z.string().min(2, "League name must be at least 2 characters").max(120),
@@ -39,6 +41,15 @@ export async function getMyTenant() {
   return tenant ?? null
 }
 
+/**
+ * Creates a new tenant (league) with free tier activation.
+ *
+ * Steps:
+ *   1. Insert tenant with plan = 'free', isActive = true.
+ *   2. Create an active subscription row for the free plan (amount = 0).
+ *   3. Link the Clerk user to the tenant via users.tenant_ids array.
+ *      This ensures the webhook-synced user record has the tenant reference.
+ */
 export async function createTenant(input: CreateTenantInput) {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
@@ -68,6 +79,11 @@ export async function createTenant(input: CreateTenantInput) {
     throw new Error("This league URL is already taken. Please choose another.")
   }
 
+  // 1. Create tenant — explicitly set plan = 'free'
+  const now = new Date()
+  const periodEnd = new Date(now)
+  periodEnd.setMonth(periodEnd.getMonth() + 1)
+
   const [tenant] = await db
     .insert(tenants)
     .values({
@@ -75,12 +91,98 @@ export async function createTenant(input: CreateTenantInput) {
       slug: parsed.slug,
       customDomain: null,
       ownerId: userId,
+      plan: "free",
       isActive: true,
     })
     .returning()
+
+  // 2. Create free subscription row
+  await db.insert(subscriptions).values({
+    tenantId: tenant.id,
+    plan: "free",
+    status: "active",
+    monthlyAmount: "0",
+    currency: "PKR",
+    currentPeriodStart: now,
+    currentPeriodEnd: periodEnd,
+  })
+
+  // 3. Link the user to this tenant via tenant_ids array
+  //    Find the user by clerkId (set by the Clerk webhook)
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.clerkId, userId))
+    .limit(1)
+
+  if (user) {
+    const currentTenantIds: string[] = Array.isArray(user.tenantIds) ? user.tenantIds : []
+    if (!currentTenantIds.includes(tenant.id)) {
+      await db
+        .update(users)
+        .set({
+          tenantIds: [...currentTenantIds, tenant.id],
+          role: "league_owner",
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id))
+    }
+  }
 
   revalidatePath("/dashboard")
   revalidatePath("/dashboard/league")
 
   return { success: true, tenant }
 }
+
+const updateBrandingSchema = z.object({
+  name: z.string().min(2, "League name must be at least 2 characters").max(120),
+  appName: z.string().optional().nullable(),
+  logoUrl: z.string().url().optional().nullable().or(z.literal("")),
+  faviconUrl: z.string().url().optional().nullable().or(z.literal("")),
+  primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid hex color").optional().nullable(),
+  secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid hex color").optional().nullable(),
+  accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid hex color").optional().nullable(),
+})
+
+export type UpdateBrandingInput = z.infer<typeof updateBrandingSchema>
+
+export const updateTenantBrandingSettings = withAuth("settings:manage", async (input: UpdateBrandingInput) => {
+  const { userId } = await auth()
+  if (!userId) throw new Error("Unauthorized")
+  const tenant = await getMyTenant()
+  if (!tenant) throw new Error("Tenant not found")
+
+  const validated = updateBrandingSchema.parse(input)
+
+  // Update tenant name
+  await db.update(tenants)
+    .set({ name: validated.name, updatedAt: new Date() })
+    .where(eq(tenants.id, tenant.id))
+
+  // Upsert tenant branding
+  const brandingData = {
+    tenantId: tenant.id,
+    appName: validated.appName || validated.name,
+    logoUrl: validated.logoUrl || null,
+    faviconUrl: validated.faviconUrl || null,
+    primaryColor: validated.primaryColor || null,
+    secondaryColor: validated.secondaryColor || null,
+    accentColor: validated.accentColor || null,
+    updatedAt: new Date()
+  }
+
+  const [existingBranding] = await db.select().from(tenantBranding).where(eq(tenantBranding.tenantId, tenant.id)).limit(1)
+  if (existingBranding) {
+    await db.update(tenantBranding).set(brandingData).where(eq(tenantBranding.tenantId, tenant.id))
+  } else {
+    await db.insert(tenantBranding).values({
+      ...brandingData,
+      createdAt: new Date()
+    })
+  }
+
+  revalidatePath("/dashboard/settings")
+  revalidatePath("/dashboard")
+  return { success: true }
+})

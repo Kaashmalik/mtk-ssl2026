@@ -28,7 +28,10 @@ export function CopyFromPrevious({ form }: CopyFromPreviousProps) {
     // Apply sample data to form
     Object.entries(sampleData).forEach(([key, value]) => {
       if (value !== undefined) {
-        form.setValue(key as keyof TournamentFormData, value as any)
+        form.setValue(
+          key as keyof TournamentFormData,
+          value as TournamentFormData[keyof TournamentFormData]
+        )
       }
     })
 

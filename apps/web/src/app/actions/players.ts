@@ -7,6 +7,8 @@ import { players, teams } from "@mtk/database"
 import { eq, and, ilike, desc, asc, count } from "drizzle-orm"
 import { z } from "zod"
 import { getMyTenant } from "@/app/actions/tenants"
+import { withAuth } from "./action-guard"
+
 
 // ─── Validation Schemas ───────────────────────────────────────
 
@@ -56,7 +58,7 @@ async function requireTenant() {
 
 // ─── Actions ──────────────────────────────────────────────────
 
-export async function createPlayer(input: CreatePlayerInput) {
+export const createPlayer = withAuth("player:create", async (input: CreatePlayerInput) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -64,7 +66,8 @@ export async function createPlayer(input: CreatePlayerInput) {
     ...input,
     tenantId: input.tenantId ?? tenant.id,
   })
-  if (validated.tenantId !== tenant.id) throw new Error("Invalid tenant")
+  const tenantId = validated.tenantId ?? tenant.id
+  if (tenantId !== tenant.id) throw new Error("Invalid tenant")
 
   if (validated.teamId) {
     const [team] = await db.select().from(teams)
@@ -75,15 +78,16 @@ export async function createPlayer(input: CreatePlayerInput) {
 
   const [player] = await db.insert(players).values({
     ...validated,
+    tenantId,
     createdBy: userId,
   }).returning()
 
   revalidatePath("/dashboard/players")
   revalidatePath("/dashboard")
   return { success: true, player }
-}
+})
 
-export async function updatePlayer(id: string, input: UpdatePlayerInput) {
+export const updatePlayer = withAuth("player:update", async (id: string, input: UpdatePlayerInput) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -112,9 +116,9 @@ export async function updatePlayer(id: string, input: UpdatePlayerInput) {
   revalidatePath("/dashboard/players")
   revalidatePath(`/dashboard/players/${id}`)
   return { success: true, player }
-}
+})
 
-export async function deletePlayer(id: string) {
+export const deletePlayer = withAuth("player:delete", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -124,9 +128,9 @@ export async function deletePlayer(id: string) {
   revalidatePath("/dashboard/players")
   revalidatePath("/dashboard")
   return { success: true }
-}
+})
 
-export async function getPlayer(id: string) {
+export const getPlayer = withAuth("player:read", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -134,9 +138,9 @@ export async function getPlayer(id: string) {
     .where(and(eq(players.id, id), eq(players.tenantId, tenant.id)))
     .limit(1)
   return player ?? null
-}
+})
 
-export async function getPlayers(filters: PlayerFilters) {
+export const getPlayers = withAuth("player:read", async (filters: PlayerFilters) => {
   const tenant = await requireTenant()
   const validated = playerFiltersSchema.parse({ ...filters, tenantId: tenant.id })
   const { teamId, role, status, search, page, pageSize, sortBy, sortOrder } = validated
@@ -176,4 +180,4 @@ export async function getPlayers(filters: PlayerFilters) {
       totalPages: Math.ceil(Number(total) / pageSize),
     },
   }
-}
+})

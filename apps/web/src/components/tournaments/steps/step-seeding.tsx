@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import { UseFormReturn } from "react-hook-form"
 import { Card, CardContent } from "@mtk/ui"
 import { GripVertical } from "lucide-react"
@@ -73,7 +73,7 @@ export function StepSeeding({ form }: StepSeedingProps) {
   const format = form.watch("format")
 
   // Generate placeholder teams
-  const generateTeams = () => {
+  const generateTeams = useCallback(() => {
     const teams = form.watch("teamSeeding") || []
     if (teams.length === 0) {
       return Array.from({ length: maxTeams }, (_, i) => ({
@@ -85,13 +85,13 @@ export function StepSeeding({ form }: StepSeedingProps) {
       id,
       name: `Team ${index + 1}`,
     }))
-  }
+  }, [form, maxTeams])
 
-  const [teams, setTeams] = useState(generateTeams())
+  const [teams, setTeams] = useState(() => generateTeams())
 
   useEffect(() => {
     setTeams(generateTeams())
-  }, [maxTeams])
+  }, [generateTeams])
 
   const sensors = useSensors(
     useSensor(PointerSensor),

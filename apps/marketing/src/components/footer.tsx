@@ -5,8 +5,13 @@ import { Twitter, Github, Mail, Phone } from "lucide-react";
 
 interface FooterProps {
   tenantBranding?: {
-    tenant?: any;
-    branding?: any;
+    tenant?: {
+      name?: string | null;
+    } | null;
+    branding?: {
+      hideSslBranding?: boolean | null;
+      appName?: string | null;
+    } | null;
   } | null;
 }
 

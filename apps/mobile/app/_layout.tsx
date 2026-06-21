@@ -1,13 +1,37 @@
 import { Stack } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, Component, type ReactNode } from "react";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { View, Text } from "react-native";
+import "react-native-url-polyfill/auto";
 import "../src/lib/i18n";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: "" };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: "#f3f4f6" }}>
+          <Text style={{ fontSize: 18, fontWeight: "bold", color: "#dc2626", marginBottom: 8 }}>Something went wrong</Text>
+          <Text style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>{this.state.error}</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function RootLayout() {
   useOfflineSync();
@@ -44,9 +68,11 @@ export default function RootLayout() {
   }, [router]);
 
   return (
+    <ErrorBoundary>
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="auto" />
+        <OfflineBanner />
         <Stack
           screenOptions={{
             headerStyle: {
@@ -59,15 +85,33 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen
-            name="index"
+            name="(tabs)"
             options={{
-              title: "Shakir Super League",
+              headerShown: false,
             }}
           />
           <Stack.Screen
-            name="matches"
+            name="results"
             options={{
-              title: "Matches",
+              title: "Results",
+            }}
+          />
+          <Stack.Screen
+            name="teams"
+            options={{
+              title: "Teams",
+            }}
+          />
+          <Stack.Screen
+            name="players"
+            options={{
+              title: "Players",
+            }}
+          />
+          <Stack.Screen
+            name="news"
+            options={{
+              title: "News",
             }}
           />
           <Stack.Screen
@@ -83,14 +127,15 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
-            name="settings"
+            name="team/[teamId]"
             options={{
-              title: "Settings",
+              title: "Team Details",
             }}
           />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 

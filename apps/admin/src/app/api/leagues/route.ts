@@ -1,30 +1,23 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { getSupabaseServer, isSuperAdmin } from "@/lib/supabase-server";
+import { verifySuperAdmin } from "@/lib/admin-auth";
+import { db, tenants } from "@mtk/database";
+import { desc, eq } from "drizzle-orm";
 
 export async function GET() {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
+    const data = await db
+      .select()
+      .from(tenants)
+      .orderBy(desc(tenants.createdAt));
 
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const supabase = getSupabaseServer();
-    const { data: tenants, error } = await supabase
-      .from("tenants")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    return NextResponse.json({ leagues: tenants || [] });
+    return NextResponse.json({ leagues: data || [] });
   } catch (error) {
     console.error("Leagues API error:", error);
     return NextResponse.json(
@@ -35,19 +28,12 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const { leagueId, isActive } = await request.json();
 
     if (!leagueId || typeof isActive !== "boolean") {
@@ -57,15 +43,18 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("tenants")
-      .update({ is_active: isActive, updated_at: new Date().toISOString() })
-      .eq("id", leagueId)
-      .select()
-      .single();
+    const [data] = await db
+      .update(tenants)
+      .set({ isActive, updatedAt: new Date() })
+      .where(eq(tenants.id, leagueId))
+      .returning();
 
-    if (error) throw error;
+    if (!data) {
+      return NextResponse.json(
+        { error: "League not found" },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({ league: data });
   } catch (error) {
@@ -76,4 +65,5 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
 

@@ -4,6 +4,9 @@ import { db } from "@mtk/database";
 import { tenants, emailDomainVerifications } from "@mtk/database";
 import { eq, and } from "drizzle-orm";
 import { isSuperAdmin } from "@/lib/super-admin";
+import dns from "dns";
+import { generateKeyPairSync } from "crypto";
+import { captureError, getRequestLogger } from "@mtk/observability";
 
 /**
  * GET - Check email domain verification status
@@ -82,7 +85,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(updated[0]);
   } catch (error) {
-    console.error("Error checking email verification:", error);
+    getRequestLogger().error("Error checking email verification", error);
+    await captureError(error, {
+      level: "error",
+      tags: { source: "email-verify", method: "GET" },
+    });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -134,9 +141,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate DKIM key (simplified - in production use proper key generation)
+    // Generate DKIM key pair (RSA 2048).
+    // The PUBLIC key goes into the DNS TXT record (visible to all).
+    // The PRIVATE key is stored so the mail-sending service can DKIM-sign
+    // outbound messages for this domain. Previously the private key was
+    // discarded, making the DKIM record useless for actual signing.
     const dkimSelector = "default";
-    const dkimPublicKey = generateDkimPublicKey();
+    const { dkimPublicKeyRecord, dkimPrivateKeyPem } = generateDkimKeyPair();
 
     // Generate SPF record
     const spfRecord = `v=spf1 include:_spf.ssl.cricket ~all`;
@@ -148,7 +159,8 @@ export async function POST(request: NextRequest) {
       tenantId: tenant[0].id,
       domain,
       senderEmail,
-      dkimPublicKey,
+      dkimPublicKey: dkimPublicKeyRecord,
+      dkimPrivateKey: dkimPrivateKeyPem,
       dkimSelector,
       spfRecord,
       dmarcRecord,
@@ -189,7 +201,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(verification[0]);
   } catch (error) {
-    console.error("Error initiating email verification:", error);
+    getRequestLogger().error("Error initiating email verification", error);
+    await captureError(error, {
+      level: "error",
+      tags: { source: "email-verify", method: "POST" },
+    });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -201,20 +217,101 @@ export async function POST(request: NextRequest) {
  * Check email DNS records (simplified)
  */
 async function checkEmailDnsRecords(
-  _domain: string,
-  _verification: Record<string, unknown>
+  domain: string,
+  verification: typeof emailDomainVerifications.$inferSelect
 ): Promise<boolean> {
-  // In production, check actual DNS records for SPF, DKIM, DMARC
-  // For now, return false
-  return false;
+  const log = getRequestLogger();
+  try {
+    const spfExpected = verification.spfRecord;
+    const dmarcExpected = verification.dmarcRecord;
+    const dkimExpected = verification.dkimPublicKey;
+    const dkimSelector = verification.dkimSelector || "default";
+
+    // 1. Resolve SPF on root domain
+    let spfOk = false;
+    if (spfExpected) {
+      try {
+        const spfRecords = await dns.promises.resolveTxt(domain);
+        spfOk = spfRecords.some((record) =>
+          record.some((val) => val === spfExpected || val.includes(spfExpected))
+        );
+      } catch (err) {
+        log.warn("SPF check failed", { domain, error: err instanceof Error ? err.message : err });
+      }
+    }
+
+    // 2. Resolve DMARC on _dmarc.domain
+    let dmarcOk = false;
+    if (dmarcExpected) {
+      try {
+        const dmarcRecords = await dns.promises.resolveTxt(`_dmarc.${domain}`);
+        dmarcOk = dmarcRecords.some((record) =>
+          record.some((val) => val === dmarcExpected || val.includes(dmarcExpected))
+        );
+      } catch (err) {
+        log.warn("DMARC check failed", { domain, error: err instanceof Error ? err.message : err });
+      }
+    }
+
+    // 3. Resolve DKIM on selector._domainkey.domain
+    let dkimOk = false;
+    if (dkimExpected) {
+      try {
+        const dkimRecords = await dns.promises.resolveTxt(`${dkimSelector}._domainkey.${domain}`);
+        dkimOk = dkimRecords.some((record) =>
+          record.some((val) => val === dkimExpected || val.includes(dkimExpected))
+        );
+      } catch (err) {
+        log.warn("DKIM check failed", { domain, selector: dkimSelector, error: err instanceof Error ? err.message : err });
+      }
+    }
+
+    log.debug("Email DNS record check", { domain, spfOk, dmarcOk, dkimOk });
+    return spfOk && dmarcOk && dkimOk;
+  } catch (error) {
+    log.error("Email DNS records verification failed", error, { domain });
+    return false;
+  }
 }
 
 /**
- * Generate DKIM public key (simplified)
+ * Generate a DKIM RSA key pair.
+ *
+ * Returns:
+ *   - dkimPublicKeyRecord: the TXT record value to publish at
+ *     `<selector>._domainkey.<domain>` (e.g. "v=DKIM1; k=rsa; p=...").
+ *   - dkimPrivateKeyPem: the PEM-encoded private key the mail service uses
+ *     to sign outbound messages.
+ *
+ * SECURITY: the private key MUST be treated as a secret. In production it
+ * should be encrypted at rest (KMS/Vault envelope) rather than stored as
+ * plaintext in the DB — see migration 019 for the column and the security
+ * note about hardening.
  */
-function generateDkimPublicKey(): string {
-  // In production, generate proper RSA public key
-  // This is a placeholder
-  return `k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC...`;
+function generateDkimKeyPair(): {
+  dkimPublicKeyRecord: string;
+  dkimPrivateKeyPem: string;
+} {
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: {
+      type: "spki",
+      format: "pem",
+    },
+    privateKeyEncoding: {
+      type: "pkcs8",
+      format: "pem",
+    },
+  });
+
+  const rawPublicKey = publicKey
+    .replace(/-----BEGIN PUBLIC KEY-----/, "")
+    .replace(/-----END PUBLIC KEY-----/, "")
+    .replace(/\s+/g, "");
+
+  return {
+    dkimPublicKeyRecord: `v=DKIM1; k=rsa; p=${rawPublicKey}`,
+    dkimPrivateKeyPem: privateKey,
+  };
 }
 

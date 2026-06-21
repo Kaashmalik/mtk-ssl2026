@@ -29,7 +29,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9.15.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -60,7 +60,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9.15.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -81,30 +81,74 @@ jobs:
           fail_ci_if_error: false
 
   # ============================================
-  # SECURITY SCAN
+  # SECURITY SCAN (blocking — fails the pipeline on critical findings)
   # ============================================
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # required for SARIF upload to GitHub Security tab
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for secret scanning
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ---- 1. Secret scanning (gitleaks) — ALWAYS BLOCKING ----
+      # Catches accidentally committed API keys, service_role keys, JWT secrets.
+      - name: Run Gitleaks (secret scan)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: set GITLEAKS_LICENSE for org-wide config & private repos
+          # GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      # ---- 2. Dependency audit (pnpm audit) — blocking on high/critical ----
+      - name: Run pnpm audit (dependency vulnerabilities)
+        run: pnpm audit --audit-level high
+        continue-on-error: false   # HARD FAIL on high/critical vulns
+
+      # ---- 3. Snyk (if token configured) — non-blocking but reports ----
       - name: Run Snyk
-        uses: snyk/actions/node@master
-        continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        if: ${{ env.SNYK_TOKEN != '' }}
+        uses: snyk/actions/node@master
         with:
           args: --severity-threshold=high
+          sarif: true
+        continue-on-error: true   # informational; covered by pnpm audit above
 
-      - name: Run Trivy
+      - name: Upload Snyk SARIF to GitHub Security tab
+        if: always() && hashFiles('snyk.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk.sarif
+
+      # ---- 4. Trivy filesystem scan — blocking on CRITICAL ----
+      - name: Run Trivy (filesystem scan)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          exit-code: '1'   # HARD FAIL on critical findings
+          ignore-unfixed: true
 
   # ============================================
   # BUILD
@@ -120,7 +164,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9.15.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -248,7 +292,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9.15.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

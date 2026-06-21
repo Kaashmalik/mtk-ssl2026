@@ -7,6 +7,8 @@ import { leagueRegistrations, teams, tournaments } from "@mtk/database"
 import { eq, and, desc } from "drizzle-orm"
 import { z } from "zod"
 import { getMyTenant } from "@/app/actions/tenants"
+import { withAuth } from "./action-guard"
+
 
 const registerTeamSchema = z.object({
   tenantId: z.string().uuid().optional(),
@@ -25,7 +27,7 @@ async function requireTenant() {
   return tenant
 }
 
-export async function registerTeam(input: RegisterTeamInput) {
+export const registerTeam = withAuth("registration:create", async (input: RegisterTeamInput) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -33,7 +35,8 @@ export async function registerTeam(input: RegisterTeamInput) {
     ...input,
     tenantId: input.tenantId ?? tenant.id,
   })
-  if (validated.tenantId !== tenant.id) throw new Error("Invalid tenant")
+  const tenantId = validated.tenantId ?? tenant.id
+  if (tenantId !== tenant.id) throw new Error("Invalid tenant")
 
   const [team] = await db.select().from(teams)
     .where(and(eq(teams.id, validated.teamId), eq(teams.tenantId, tenant.id)))
@@ -47,12 +50,17 @@ export async function registerTeam(input: RegisterTeamInput) {
 
   // Check for duplicate registration
   const existing = await db.select().from(leagueRegistrations)
-    .where(and(eq(leagueRegistrations.teamId, validated.teamId), eq(leagueRegistrations.tournamentId, validated.tournamentId)))
+    .where(and(
+      eq(leagueRegistrations.teamId, validated.teamId),
+      eq(leagueRegistrations.tournamentId, validated.tournamentId),
+      eq(leagueRegistrations.tenantId, tenant.id)
+    ))
     .limit(1)
   if (existing.length > 0) throw new Error("Team is already registered for this tournament")
 
   const [reg] = await db.insert(leagueRegistrations).values({
     ...validated,
+    tenantId,
     registeredBy: userId,
     status: "pending",
     paymentStatus: "unpaid",
@@ -60,9 +68,9 @@ export async function registerTeam(input: RegisterTeamInput) {
 
   revalidatePath(`/dashboard/tournaments/${validated.tournamentId}`)
   return { success: true, registration: reg }
-}
+})
 
-export async function approveRegistration(registrationId: string) {
+export const approveRegistration = withAuth("registration:manage", async (registrationId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -72,9 +80,9 @@ export async function approveRegistration(registrationId: string) {
   if (!reg) throw new Error("Registration not found")
   revalidatePath(`/dashboard/tournaments/${reg.tournamentId}`)
   return { success: true, registration: reg }
-}
+})
 
-export async function rejectRegistration(registrationId: string, reason?: string) {
+export const rejectRegistration = withAuth("registration:manage", async (registrationId: string, reason?: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -84,18 +92,18 @@ export async function rejectRegistration(registrationId: string, reason?: string
   if (!reg) throw new Error("Registration not found")
   revalidatePath(`/dashboard/tournaments/${reg.tournamentId}`)
   return { success: true, registration: reg }
-}
+})
 
-export async function getRegistrations(tournamentId: string) {
+export const getRegistrations = withAuth("registration:manage", async (tournamentId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
   return db.select().from(leagueRegistrations)
     .where(and(eq(leagueRegistrations.tournamentId, tournamentId), eq(leagueRegistrations.tenantId, tenant.id)))
     .orderBy(desc(leagueRegistrations.createdAt))
-}
+})
 
-export async function getMyRegistrations(tenantId: string) {
+export const getMyRegistrations = withAuth("registration:create", async (tenantId: string) => {
   const { userId } = await auth()
   if (!userId) return []
   const tenant = await requireTenant()
@@ -103,4 +111,4 @@ export async function getMyRegistrations(tenantId: string) {
   return db.select().from(leagueRegistrations)
     .where(and(eq(leagueRegistrations.tenantId, tenant.id), eq(leagueRegistrations.registeredBy, userId)))
     .orderBy(desc(leagueRegistrations.createdAt))
-}
+})

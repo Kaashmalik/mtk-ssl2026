@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 /**
  * Tenant plan enum
  */
-export const tenantPlanEnum = pgEnum("tenant_plan", ["free", "pro", "enterprise"]);
+export const tenantPlanEnum = pgEnum("tenant_plan", ["free", "starter", "pro", "enterprise"]);
 
 /**
  * Tenants table - Multi-tenant architecture

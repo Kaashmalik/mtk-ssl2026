@@ -128,4 +128,15 @@ export class StripeProvider {
       checkoutUrl: session.url!,
     };
   }
+
+  verifyWebhook(rawBody: Buffer, signature: string): Stripe.Event {
+    if (!this.stripe) {
+      throw new Error('Stripe is not initialized in mock mode');
+    }
+    const webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
+    if (!webhookSecret) {
+      throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
+    }
+    return this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+  }
 }

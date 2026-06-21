@@ -110,12 +110,11 @@ BEGIN
   -- Fallback: Get email from JWT
   user_email := (auth.jwt() ->> 'email')::text;
   
-  -- Check if email matches super admin
-  IF user_email = 'kashif@maliktech.pk' THEN
-    RETURN true;
+  IF user_email IS NULL THEN
+    RETURN false;
   END IF;
   
-  -- Also check users table by email
+  -- Check users table by email
   SELECT role INTO user_role
   FROM users
   WHERE email = user_email;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@mtk/ui";
 import { Button } from "@mtk/ui";
 
@@ -10,13 +10,7 @@ export function SystemHealthDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"health" | "errors">("health");
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [activeTab]);
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       if (activeTab === "health") {
         const res = await fetch("/api/system-health");
@@ -32,7 +26,13 @@ export function SystemHealthDashboard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeTab]);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -169,14 +169,14 @@ export function SystemHealthDashboard() {
                           <span className="text-sm text-muted-foreground">{error.service}</span>
                         </div>
                         <div className="font-medium mt-2">{error.message}</div>
-                        {error.error_type && (
+                        {error.errorType && (
                           <div className="text-sm text-muted-foreground mt-1">
-                            Type: {error.error_type}
+                            Type: {error.errorType}
                           </div>
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {new Date(error.created_at).toLocaleString()}
+                        {new Date(error.createdAt).toLocaleString()}
                       </div>
                     </div>
                   </div>

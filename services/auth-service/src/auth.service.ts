@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RbacService } from './rbac/rbac.service';
+import { createClerkClient, verifyToken } from '@clerk/backend';
+
 
 export interface ValidateTokenRequest {
   token: string;
@@ -10,7 +12,7 @@ export interface ValidateTokenRequest {
 export interface User {
   id: string;
   email: string;
-  tenantIds: string[];
+  tenant_ids: string[];
   roles: string[];
 }
 
@@ -29,23 +31,54 @@ export class AuthService {
 
   async validateToken(request: ValidateTokenRequest): Promise<ValidateTokenResponse> {
     try {
-      // Verify with Clerk
-      const _clerkSecretKey = this.configService.get<string>('CLERK_SECRET_KEY');
+      const clerkSecretKey = this.configService.get<string>('CLERK_SECRET_KEY');
       
-      // In production, use Clerk SDK to verify
-      // const clerk = new Clerk({ secretKey: _clerkSecretKey });
-      // const session = await clerk.sessions.verifySession(request.token);
-      
-      // Mock validation for development
-      if (!request.token || request.token === 'invalid') {
-        return { valid: false, error: 'Invalid token' };
+      // Real validation with Clerk Backend SDK
+      if (clerkSecretKey && request.token && request.token !== 'invalid') {
+        const clerk = createClerkClient({ secretKey: clerkSecretKey });
+        try {
+          const verifiedToken = await verifyToken(request.token, { secretKey: clerkSecretKey });
+          const userId = verifiedToken.sub;
+          
+          let email = '';
+          try {
+            const clerkUser = await clerk.users.getUser(userId);
+            email = clerkUser.emailAddresses[0]?.emailAddress || '';
+          } catch (userErr) {
+            // Log warning but proceed with token subject if user fetch fails (e.g. rate limit/network)
+            console.warn(`Failed to fetch user details from Clerk: ${userErr}`);
+          }
+
+          const tenantId = request.tenantId || 'tenant_default';
+          const roles = await this.rbacService.getUserRoles(userId, tenantId);
+
+          return {
+            valid: true,
+            user: {
+              id: userId,
+              email: email || 'authenticated-user@clerk.internal',
+              tenant_ids: [tenantId],
+              roles: roles.length > 0 ? roles : ['user'],
+            },
+          };
+        } catch (verifyErr) {
+          return {
+            valid: false,
+            error: verifyErr instanceof Error ? verifyErr.message : 'Clerk token verification failed',
+          };
+        }
       }
 
-      // Return mock user for now
+      // Fallback for development if Clerk is not fully configured
+      if (!request.token || request.token === 'invalid') {
+        return { valid: false, error: 'Invalid or missing token' };
+      }
+
+      const tenantId = request.tenantId || 'tenant_default';
       const user: User = {
         id: 'user_123',
         email: 'test@ssl.cricket',
-        tenantIds: [request.tenantId || 'tenant_default'],
+        tenant_ids: [tenantId],
         roles: ['user'],
       };
 
@@ -76,3 +109,4 @@ export class AuthService {
     await this.rbacService.revokeRole(userId, tenantId, role);
   }
 }
+

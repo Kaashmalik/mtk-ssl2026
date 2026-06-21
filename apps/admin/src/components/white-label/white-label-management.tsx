@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@mtk/ui";
 import { Badge, Button, Input, Textarea } from "@mtk/ui";
 
@@ -12,11 +12,7 @@ export function WhiteLabelManagement() {
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected" | "revoked">("pending");
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    fetchRequests();
-  }, [statusFilter]);
-
-  async function fetchRequests() {
+  const fetchRequests = useCallback(async () => {
     try {
       const res = await fetch(`/api/white-label?status=${statusFilter}`);
       const data = await res.json();
@@ -26,7 +22,11 @@ export function WhiteLabelManagement() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   async function handleReview(requestId: string, status: "approved" | "rejected" | "revoked") {
     try {

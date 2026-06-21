@@ -27,7 +27,7 @@ export class ProxyService {
       },
       'scoring-service': {
         host: configService.get('SCORING_SERVICE_HOST', 'scoring-service'),
-        port: configService.get('SCORING_SERVICE_PORT', 4000),
+        port: configService.get('SCORING_SERVICE_PORT', 4002),
         protocol: 'http',
       },
       'analytics-service': {
@@ -37,8 +37,8 @@ export class ProxyService {
       },
       'payment-service': {
         host: configService.get('PAYMENT_SERVICE_HOST', 'payment-service'),
-        port: configService.get('PAYMENT_SERVICE_PORT', 5004),
-        protocol: 'grpc',
+        port: configService.get('PAYMENT_SERVICE_HTTP_PORT', 5006),
+        protocol: 'http',
       },
       'notification-service': {
         host: configService.get('NOTIFICATION_SERVICE_HOST', 'notification-service'),

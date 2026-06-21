@@ -14,10 +14,15 @@ import { ArrowLeft, Save, Loader2, Trophy } from "lucide-react"
 import { createTournament } from "@/app/actions/tournaments"
 
 interface NewTournamentFormProps {
-  tenantId: string
+  /**
+   * Kept for backward compatibility with callers that still pass tenantId,
+   * but no longer used — the server action resolves the tenant from Clerk
+   * auth via the tenant context. Safe to remove from call sites.
+   */
+  tenantId?: string
 }
 
-export function NewTournamentForm({ tenantId }: NewTournamentFormProps) {
+export function NewTournamentForm(_: NewTournamentFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -47,7 +52,6 @@ export function NewTournamentForm({ tenantId }: NewTournamentFormProps) {
           endDate: formData.endDate || null,
           registrationDeadline: formData.registrationDeadline || null,
           maxTeams: formData.maxTeams ? Number(formData.maxTeams) : null,
-          tenantId,
         })
         router.push("/dashboard/tournaments")
       } catch (err) {

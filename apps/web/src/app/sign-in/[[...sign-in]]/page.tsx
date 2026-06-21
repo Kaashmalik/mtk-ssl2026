@@ -1,4 +1,5 @@
 import { SignIn } from "@clerk/nextjs";
+import Image from "next/image";
 import { headers } from "next/headers";
 import { db } from "@mtk/database";
 import { tenants, tenantBranding } from "@mtk/database";
@@ -83,10 +84,13 @@ export default async function SignInPage() {
       <div className="relative z-10 w-full max-w-md">
         {branding?.logoUrl && (
           <div className="mb-8 flex justify-center">
-            <img
+            <Image
               src={branding.logoUrl}
               alt={branding.appName || "Logo"}
               className="h-16 w-auto"
+              width={256}
+              height={64}
+              unoptimized
             />
           </div>
         )}

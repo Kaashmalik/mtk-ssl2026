@@ -42,12 +42,12 @@ export function VoiceInput({ onCommand }: VoiceInputProps) {
       </Button>
       {isListening && (
         <div className="text-center text-sm text-muted-foreground">
-          Listening... Say: "zero", "one", "two", "four", "six", "wicket", "wide", etc.
+          Listening... Say: &quot;zero&quot;, &quot;one&quot;, &quot;two&quot;, &quot;four&quot;, &quot;six&quot;, &quot;wicket&quot;, &quot;wide&quot;, etc.
         </div>
       )}
       {transcript && (
         <div className="text-center text-sm font-medium">
-          Heard: "{transcript}"
+          Heard: &quot;{transcript}&quot;
         </div>
       )}
     </div>

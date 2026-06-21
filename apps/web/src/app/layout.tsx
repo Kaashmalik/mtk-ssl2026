@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Providers } from "@/components/providers";
+import { CommandPaletteLoader } from "@/components/command-palette-loader";
 import "./globals.css";
-import { Toaster } from "@mtk/ui";
+import { Toaster } from "@mtk/ui/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "Shakir Super League - Pakistan's #1 Cricket Platform",
@@ -23,6 +24,7 @@ export default function RootLayout({
           {children}
           <Toaster />
         </Providers>
+        <CommandPaletteLoader />
       </body>
     </html>
   );

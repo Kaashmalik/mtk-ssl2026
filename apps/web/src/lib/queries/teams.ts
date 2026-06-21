@@ -1,6 +1,6 @@
 import { db } from "@mtk/database"
 import { teams, players, matches } from "@mtk/database"
-import { eq, and, or, desc, count } from "drizzle-orm"
+import { eq, and, or, count } from "drizzle-orm"
 
 export async function getTeamById(id: string) {
   const [team] = await db.select().from(teams).where(eq(teams.id, id)).limit(1)

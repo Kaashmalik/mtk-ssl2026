@@ -55,10 +55,22 @@ export function TenantBrandingProvider({ branding }: { branding: TenantBranding 
         style.id = styleId;
         document.head.appendChild(style);
       }
-      style.textContent = branding.customCss;
+      style.textContent = sanitizeCss(branding.customCss);
     }
   }, [branding, pathname]);
 
   return null;
+}
+
+export function sanitizeCss(css: string): string {
+  if (!css) return "";
+  return css
+    .replace(/expression\s*\(.*?\)/gi, "")
+    .replace(/behavior\s*:/gi, "")
+    .replace(/-moz-binding/gi, "")
+    .replace(/@import\s+/gi, "")
+    .replace(/javascript\s*:/gi, "")
+    .replace(/url\s*\(\s*['"]?javascript:.*?\)/gi, "")
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
 }
 

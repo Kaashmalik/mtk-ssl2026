@@ -5,6 +5,16 @@ import { Button } from "@mtk/ui";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@mtk/ui";
 import { Check, Star } from "lucide-react";
 
+/**
+ * 4-Tier pricing — must match the DB enum `tenant_plan`:
+ *   free | starter | pro | enterprise
+ *
+ * Prices (PKR, per league):
+ *   Free     — Rs 0
+ *   Starter  — Rs 4,999
+ *   Pro      — Rs 14,999
+ *   Enterprise — Rs 49,999
+ */
 const plans = [
   {
     name: "Free",
@@ -19,11 +29,12 @@ const plans = [
       "Community support",
     ],
     cta: "Get Started",
+    ctaHref: "/sign-up",
     popular: false,
   },
   {
-    name: "Basic",
-    price: "9,999",
+    name: "Starter",
+    price: "4,999",
     period: "per league",
     description: "For growing leagues",
     features: [
@@ -35,40 +46,42 @@ const plans = [
       "Payment collection",
     ],
     cta: "Start Free Trial",
+    ctaHref: "/sign-up",
     popular: false,
   },
   {
     name: "Pro",
-    price: "29,999",
+    price: "14,999",
     period: "per league",
     description: "For professional leagues",
     features: [
-      "Unlimited teams",
+      "Unlimited teams & players",
       "Live streaming integration",
       "Fantasy cricket",
       "White-label option",
       "Priority support",
-      "Custom domain",
       "Advanced analytics",
       "API access",
     ],
-    cta: "Contact Sales",
+    cta: "Get Started",
+    ctaHref: "/sign-up",
     popular: true,
   },
   {
     name: "Enterprise",
-    price: "Custom",
-    period: "contact us",
-    description: "For major tournaments",
+    price: "49,999",
+    period: "per league",
+    description: "For major tournaments & boards",
     features: [
       "Everything in Pro",
+      "White-label + custom domain",
       "Dedicated support",
-      "Custom integrations",
       "SLA guarantee",
-      "On-premise option",
+      "Custom integrations",
       "Training & onboarding",
     ],
     cta: "Contact Sales",
+    ctaHref: "mailto:sales@ssl.cricket?subject=Enterprise Inquiry",
     popular: false,
   },
 ];
@@ -129,17 +142,11 @@ export function Pricing() {
                   </CardDescription>
                   <div className="mt-4">
                     <span className="text-4xl font-bold text-gray-900 dark:text-white">
-                      {plan.price === "Custom" ? (
-                        "Custom"
-                      ) : (
-                        <>
-                          Rs {plan.price}
-                          {plan.period !== "forever" && (
-                            <span className="text-lg font-normal text-gray-600 dark:text-gray-400">
-                              /{plan.period}
-                            </span>
-                          )}
-                        </>
+                      Rs {plan.price}
+                      {plan.period !== "forever" && (
+                        <span className="text-lg font-normal text-gray-600 dark:text-gray-400">
+                          /{plan.period}
+                        </span>
                       )}
                     </span>
                   </div>
@@ -162,11 +169,7 @@ export function Pricing() {
                     size="lg"
                     variant={plan.popular ? "default" : "outline"}
                     onClick={() => {
-                      if (plan.name === "Enterprise" || plan.name === "Pro") {
-                        window.location.href = "mailto:support@ssl.cricket?subject=Enterprise Inquiry";
-                      } else {
-                        document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
-                      }
+                      window.location.href = plan.ctaHref;
                     }}
                   >
                     {plan.cta}
@@ -180,4 +183,3 @@ export function Pricing() {
     </section>
   );
 }
-

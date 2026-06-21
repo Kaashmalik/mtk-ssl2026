@@ -2,30 +2,179 @@ import { auth } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Suspense } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
 import { Button } from "@mtk/ui/components/ui/button"
 import { StatCard } from "@mtk/ui/components/ui/stat-card"
 import { Skeleton } from "@mtk/ui/components/ui/skeleton"
-import { MotionWrapper, MotionItem } from "@mtk/ui/components/ui/motion-wrapper"
+import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { Badge } from "@mtk/ui/components/ui/badge"
-import { Plus, Trophy, Users, CalendarDays, ArrowRight, Sword, Radio, TrendingUp, Zap, Clock } from "lucide-react"
+import { Plus, Trophy, Users, CalendarDays, ArrowRight, Sword, TrendingUp, Zap, Clock, Inbox } from "lucide-react"
 import { getMyTenant } from "@/app/actions/tenants"
+import { db, teams, players, tournaments, matches, matchInnings } from "@mtk/database"
+import { eq, count, and, desc } from "drizzle-orm"
+import { unstable_noStore as noStore } from "next/cache"
 
-// Dashboard Stats Component
-async function DashboardStats() {
-  // In production, these come from getDashboardStats()
-  // For now using realistic demo data to showcase the UI
-  const stats = {
-    totalTeams: 24,
-    totalPlayers: 312,
-    totalTournaments: 8,
-    totalMatches: 156,
-    activeMatches: 3,
-    previousTeams: 20,
-    previousPlayers: 280,
-    previousTournaments: 6,
-    previousMatches: 120,
+// ─── Data Fetching Helpers ────────────────────────────────────
+
+async function getDashboardStats(tenantId: string) {
+  try {
+    const [
+      [{ totalTeams }],
+      [{ totalPlayers }],
+      [{ totalTournaments }],
+      [{ totalMatches }],
+      [{ activeMatches }],
+    ] = await Promise.all([
+      db.select({ totalTeams: count() }).from(teams).where(eq(teams.tenantId, tenantId)),
+      db.select({ totalPlayers: count() }).from(players).where(eq(players.tenantId, tenantId)),
+      db.select({ totalTournaments: count() }).from(tournaments).where(eq(tournaments.tenantId, tenantId)),
+      db.select({ totalMatches: count() }).from(matches).where(eq(matches.tenantId, tenantId)),
+      db.select({ activeMatches: count() }).from(matches).where(and(eq(matches.tenantId, tenantId), eq(matches.status, "live"))),
+    ])
+
+    return {
+      totalTeams: Number(totalTeams),
+      totalPlayers: Number(totalPlayers),
+      totalTournaments: Number(totalTournaments),
+      totalMatches: Number(totalMatches),
+      activeMatches: Number(activeMatches),
+      // No historical comparison data yet — show 0
+      previousTeams: 0,
+      previousPlayers: 0,
+      previousTournaments: 0,
+      previousMatches: 0,
+    }
+  } catch (error) {
+    console.error("Failed to fetch dashboard stats:", error)
+    return {
+      totalTeams: 0, totalPlayers: 0, totalTournaments: 0, totalMatches: 0, activeMatches: 0,
+      previousTeams: 0, previousPlayers: 0, previousTournaments: 0, previousMatches: 0,
+    }
   }
+}
+
+async function getTeamName(teamId: string): Promise<string> {
+  try {
+    const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1)
+    return team?.name ?? "TBD"
+  } catch {
+    return "TBD"
+  }
+}
+
+async function getInningsForMatch(matchId: string) {
+  try {
+    return await db.select().from(matchInnings).where(eq(matchInnings.matchId, matchId)).orderBy(matchInnings.inningsNumber)
+  } catch {
+    return []
+  }
+}
+
+async function getLiveMatches(tenantId: string) {
+  try {
+    const liveMatchesRaw = await db.select().from(matches)
+      .where(and(eq(matches.tenantId, tenantId), eq(matches.status, "live")))
+      .limit(5)
+
+    return await Promise.all(
+      liveMatchesRaw.map(async (m) => {
+        const [teamAName, teamBName, innings] = await Promise.all([
+          getTeamName(m.teamAId),
+          getTeamName(m.teamBId),
+          getInningsForMatch(m.id),
+        ])
+        const inn1 = innings.find((i) => i.inningsNumber === 1)
+        const inn2 = innings.find((i) => i.inningsNumber === 2)
+        const formatScore = (inn: typeof inn1) =>
+          inn ? `${inn.totalRuns}/${inn.totalWickets}` : "—"
+        const formatOvers = (inn: typeof inn1) =>
+          inn ? `${Math.floor(inn.totalBalls / 6)}.${inn.totalBalls % 6}` : "0.0"
+
+        return {
+          id: m.id,
+          team1: teamAName,
+          team2: teamBName,
+          score1: formatScore(inn1),
+          score2: formatScore(inn2),
+          overs2: formatOvers(inn2),
+          target: inn1 ? inn1.totalRuns + 1 : 0,
+        }
+      })
+    )
+  } catch (error) {
+    console.error("Failed to fetch live matches:", error)
+    return []
+  }
+}
+
+async function getUpcomingMatches(tenantId: string) {
+  try {
+    const upcomingRaw = await db.select().from(matches)
+      .where(and(eq(matches.tenantId, tenantId), eq(matches.status, "scheduled")))
+      .orderBy(matches.scheduledDate)
+      .limit(5)
+
+    return await Promise.all(
+      upcomingRaw.map(async (m) => {
+        const [teamAName, teamBName] = await Promise.all([
+          getTeamName(m.teamAId),
+          getTeamName(m.teamBId),
+        ])
+        return {
+          id: m.id,
+          team1: teamAName,
+          team2: teamBName,
+          time: m.scheduledDate
+            ? new Intl.DateTimeFormat("en-PK", { dateStyle: "medium", timeStyle: "short" }).format(new Date(m.scheduledDate))
+            : "TBD",
+          venue: "", // venue name lookup could be added later
+        }
+      })
+    )
+  } catch (error) {
+    console.error("Failed to fetch upcoming matches:", error)
+    return []
+  }
+}
+
+async function getRecentActivity(tenantId: string) {
+  try {
+    const recentMatches = await db.select().from(matches)
+      .where(and(eq(matches.tenantId, tenantId), eq(matches.status, "completed")))
+      .orderBy(desc(matches.updatedAt))
+      .limit(5)
+
+    return await Promise.all(
+      recentMatches.map(async (m) => {
+        const teamAName = await getTeamName(m.teamAId)
+        const teamBName = await getTeamName(m.teamBId)
+        const message = m.result ?? `${teamAName} vs ${teamBName} completed`
+        const timeAgo = getRelativeTime(m.updatedAt)
+        return { type: "match" as const, message, time: timeAgo }
+      })
+    )
+  } catch (error) {
+    console.error("Failed to fetch recent activity:", error)
+    return []
+  }
+}
+
+function getRelativeTime(date: Date): string {
+  const now = Date.now()
+  const diff = now - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return "Just now"
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days > 1 ? "s" : ""} ago`
+}
+
+// ─── Components ───────────────────────────────────────────────
+
+async function DashboardStats({ tenantId }: { tenantId: string }) {
+  const stats = await getDashboardStats(tenantId)
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -84,11 +233,8 @@ function StatsLoading() {
 }
 
 // Live Matches Section
-function LiveMatchesBanner() {
-  // Demo data — replace with getLiveMatches() in production
-  const liveMatches = [
-    { id: "1", team1: "Lahore Lions", team2: "Karachi Kings", score1: "165/4", score2: "98/3", overs2: "12.4", target: 166 },
-  ]
+async function LiveMatchesBanner({ tenantId }: { tenantId: string }) {
+  const liveMatches = await getLiveMatches(tenantId)
 
   if (liveMatches.length === 0) return null
 
@@ -123,9 +269,11 @@ function LiveMatchesBanner() {
                       <span className="font-semibold text-sm">{match.team2}</span>
                       <span className="font-bold text-base tabular-nums">{match.score2}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {match.team2} need {match.target - parseInt(match.score2)} runs from {(20 * 6 - parseFloat(match.overs2) * 6).toFixed(0)} balls
-                    </p>
+                    {match.target > 0 && match.score2 !== "—" && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {match.team2} need {Math.max(0, match.target - parseInt(match.score2))} runs
+                      </p>
+                    )}
                   </div>
                   <ArrowRight className="h-4 w-4 text-muted-foreground ml-4" />
                 </div>
@@ -178,12 +326,8 @@ function QuickActions() {
 }
 
 // Upcoming Matches Timeline
-function UpcomingMatches() {
-  const upcoming = [
-    { id: "1", team1: "Islamabad United", team2: "Peshawar Zalmi", time: "Today, 7:00 PM", venue: "Rawalpindi Stadium" },
-    { id: "2", team1: "Multan Sultans", team2: "Quetta Gladiators", time: "Tomorrow, 3:00 PM", venue: "Multan Cricket Stadium" },
-    { id: "3", team1: "Lahore Lions", team2: "Faisalabad Wolves", time: "Apr 29, 5:00 PM", venue: "Gaddafi Stadium" },
-  ]
+async function UpcomingMatchesSection({ tenantId }: { tenantId: string }) {
+  const upcoming = await getUpcomingMatches(tenantId)
 
   return (
     <Card className="glass-panel-subtle border-none">
@@ -194,36 +338,40 @@ function UpcomingMatches() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {upcoming.map((match, i) => (
-            <MotionWrapper key={match.id} variant="fadeInRight" delay={i * 0.1}>
-              <div className="flex items-start gap-3 relative group">
-                <div className="absolute left-[3px] top-4 -bottom-4 w-px bg-border group-last:hidden" />
-                <div className="h-2 w-2 rounded-full bg-info/60 mt-1.5 shrink-0 relative z-10 ring-4 ring-background group-hover:bg-info transition-colors" />
-                <div className="flex-1 pb-2">
-                  <p className="font-medium text-sm">{match.team1} <span className="text-muted-foreground text-xs mx-1">vs</span> {match.team2}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="outline" className="text-[10px] font-normal bg-card/50">{match.time}</Badge>
-                    <span className="text-xs text-muted-foreground truncate">{match.venue}</span>
+        {upcoming.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-6 text-center">
+            <CalendarDays className="h-8 w-8 text-muted-foreground/40 mb-2" />
+            <p className="text-sm text-muted-foreground">No upcoming matches scheduled</p>
+            <Link href="/dashboard/matches/new">
+              <Button variant="link" size="sm" className="mt-1 text-xs">Schedule a match</Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {upcoming.map((match, i) => (
+              <MotionWrapper key={match.id} variant="fadeInRight" delay={i * 0.1}>
+                <div className="flex items-start gap-3 relative group">
+                  <div className="absolute left-[3px] top-4 -bottom-4 w-px bg-border group-last:hidden" />
+                  <div className="h-2 w-2 rounded-full bg-info/60 mt-1.5 shrink-0 relative z-10 ring-4 ring-background group-hover:bg-info transition-colors" />
+                  <div className="flex-1 pb-2">
+                    <p className="font-medium text-sm">{match.team1} <span className="text-muted-foreground text-xs mx-1">vs</span> {match.team2}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-[10px] font-normal bg-card/50">{match.time}</Badge>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </MotionWrapper>
-          ))}
-        </div>
+              </MotionWrapper>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
 }
 
 // Recent Activity Feed
-function RecentActivity() {
-  const activities = [
-    { type: "match", message: "Lahore Lions won by 6 wickets vs Karachi Kings", time: "2 hours ago" },
-    { type: "team", message: "New team 'Sialkot Stallions' registered", time: "5 hours ago" },
-    { type: "player", message: "Ahmed scored his first century (112*)", time: "Yesterday" },
-    { type: "tournament", message: "SSL Premier League 2026 schedule published", time: "2 days ago" },
-  ]
+async function RecentActivity({ tenantId }: { tenantId: string }) {
+  const activities = await getRecentActivity(tenantId)
 
   return (
     <Card className="glass-panel-subtle border-none">
@@ -234,28 +382,39 @@ function RecentActivity() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {activities.map((activity, i) => (
-            <MotionWrapper key={i} variant="fadeInUp" delay={i * 0.1}>
-              <div className="flex items-start gap-3 relative group">
-                <div className="absolute left-[3px] top-4 -bottom-4 w-px bg-border group-last:hidden" />
-                <div className="h-2 w-2 rounded-full bg-primary/60 mt-1.5 shrink-0 relative z-10 ring-4 ring-background group-hover:bg-primary transition-colors" />
-                <div className="pb-2">
-                  <p className="text-sm font-medium">{activity.message}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{activity.time}</p>
+        {activities.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Inbox className="h-10 w-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">No activity yet</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">Complete a match to see results here</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {activities.map((activity, i) => (
+              <MotionWrapper key={i} variant="fadeInUp" delay={i * 0.1}>
+                <div className="flex items-start gap-3 relative group">
+                  <div className="absolute left-[3px] top-4 -bottom-4 w-px bg-border group-last:hidden" />
+                  <div className="h-2 w-2 rounded-full bg-primary/60 mt-1.5 shrink-0 relative z-10 ring-4 ring-background group-hover:bg-primary transition-colors" />
+                  <div className="pb-2">
+                    <p className="text-sm font-medium">{activity.message}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{activity.time}</p>
+                  </div>
                 </div>
-              </div>
-            </MotionWrapper>
-          ))}
-        </div>
+              </MotionWrapper>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
 }
 
-export default async function DashboardPage() {
-  const { userId } = await auth()
+// ─── Main Page ────────────────────────────────────────────────
 
+export default async function DashboardPage() {
+  noStore()
+
+  const { userId } = await auth()
   if (!userId) {
     redirect("/")
   }
@@ -285,20 +444,26 @@ export default async function DashboardPage() {
 
       {/* Stats */}
       <Suspense fallback={<StatsLoading />}>
-        <DashboardStats />
+        <DashboardStats tenantId={tenant.id} />
       </Suspense>
 
       {/* Live Matches Banner */}
-      <LiveMatchesBanner />
+      <Suspense fallback={null}>
+        <LiveMatchesBanner tenantId={tenant.id} />
+      </Suspense>
 
       {/* Main Grid */}
       <div className="grid gap-6 lg:grid-cols-7">
         <div className="lg:col-span-4 space-y-6">
-          <RecentActivity />
+          <Suspense fallback={<Skeleton className="h-64 w-full rounded-2xl" />}>
+            <RecentActivity tenantId={tenant.id} />
+          </Suspense>
         </div>
         <div className="lg:col-span-3 space-y-6">
           <QuickActions />
-          <UpcomingMatches />
+          <Suspense fallback={<Skeleton className="h-48 w-full rounded-2xl" />}>
+            <UpcomingMatchesSection tenantId={tenant.id} />
+          </Suspense>
         </div>
       </div>
     </div>

@@ -23,10 +23,18 @@
     "paths": {
       "@/*": ["./src/*"],
       "@mtk/database": ["../../packages/database/src/index.ts"],
-      "@mtk/database/*": ["../../packages/database/src/*"]
+      "@mtk/database/*": ["../../packages/database/src/*"],
+      "@mtk/dns-provider": ["../../packages/dns-provider/src/index.ts"],
+      "@mtk/dns-provider/*": ["../../packages/dns-provider/src/*"]
     }
   },
   "include": ["src/**/*", "../../packages/database/src/**/*"],
-  "exclude": ["node_modules", "dist", "test"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "../../packages/database/src/**/__tests__/**",
+    "../../packages/database/src/**/*.test.ts"
+  ]
 }
 

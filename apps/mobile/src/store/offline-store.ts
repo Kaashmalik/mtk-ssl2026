@@ -24,7 +24,7 @@ interface OfflineStore {
   addPendingBall: (ball: BallData) => void;
   markBallSynced: (ballId: string) => void;
   clearSyncedBalls: () => void;
-  getPendingBalls: (matchId: string) => BallData[];
+  getPendingBalls: (matchId?: string) => BallData[];
 }
 
 export const useOfflineStore = create<OfflineStore>()(
@@ -47,10 +47,13 @@ export const useOfflineStore = create<OfflineStore>()(
         set((state) => ({
           pendingBalls: state.pendingBalls.filter((ball) => !ball.synced),
         })),
-      getPendingBalls: (matchId) =>
-        get().pendingBalls.filter(
-          (ball) => ball.matchId === matchId && !ball.synced
-        ),
+      getPendingBalls: (matchId) => {
+        const pending = get().pendingBalls.filter((ball) => !ball.synced);
+        if (!matchId) {
+          return pending;
+        }
+        return pending.filter((ball) => ball.matchId === matchId);
+      },
     }),
     {
       name: "offline-storage",

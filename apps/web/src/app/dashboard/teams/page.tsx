@@ -2,29 +2,80 @@ import { auth } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@mtk/ui/components/ui/button"
-import { Card, CardContent } from "@mtk/ui/components/ui/card"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
-import { Plus, MapPin } from "lucide-react"
+import { Plus, Shield } from "lucide-react"
+import { getMyTenant } from "@/app/actions/tenants"
+import { TeamListGrid } from "@/components/teams/team-list-grid"
+import { db, teams, players, matches } from "@mtk/database"
+import { eq, and, count, or } from "drizzle-orm"
+import { unstable_noStore as noStore } from "next/cache"
 
-const DEMO_TEAMS = [
-  { id: "1", name: "Lahore Lions", shortName: "LL", city: "Lahore", primaryColor: "#2D8B4E", playerCount: 15, wins: 8, losses: 3, draws: 1 },
-  { id: "2", name: "Karachi Kings", shortName: "KK", city: "Karachi", primaryColor: "#1A4F8B", playerCount: 14, wins: 7, losses: 4, draws: 1 },
-  { id: "3", name: "Islamabad United", shortName: "IU", city: "Islamabad", primaryColor: "#E74C3C", playerCount: 13, wins: 6, losses: 5, draws: 1 },
-  { id: "4", name: "Peshawar Zalmi", shortName: "PZ", city: "Peshawar", primaryColor: "#F1C40F", playerCount: 15, wins: 5, losses: 6, draws: 1 },
-  { id: "5", name: "Multan Sultans", shortName: "MS", city: "Multan", primaryColor: "#27AE60", playerCount: 12, wins: 4, losses: 7, draws: 1 },
-  { id: "6", name: "Quetta Gladiators", shortName: "QG", city: "Quetta", primaryColor: "#8E44AD", playerCount: 14, wins: 3, losses: 8, draws: 1 },
-]
+// ─── Data Fetching ────────────────────────────────────────────
+
+async function getTeamsData(tenantId: string) {
+  try {
+    const teamsRaw = await db.select().from(teams)
+      .where(eq(teams.tenantId, tenantId))
+      .orderBy(teams.name)
+
+    return await Promise.all(
+      teamsRaw.map(async (t) => {
+        const [[{ playerCount }], [{ wins }], [{ losses }]] = await Promise.all([
+          db.select({ playerCount: count() }).from(players)
+            .where(and(eq(players.teamId, t.id), eq(players.tenantId, tenantId))),
+          db.select({ wins: count() }).from(matches)
+            .where(and(
+              eq(matches.tenantId, tenantId),
+              eq(matches.status, "completed"),
+              eq(matches.winnerId, t.id),
+            )),
+          db.select({ losses: count() }).from(matches)
+            .where(and(
+              eq(matches.tenantId, tenantId),
+              eq(matches.status, "completed"),
+              or(eq(matches.teamAId, t.id), eq(matches.teamBId, t.id)),
+              // Exclude wins from total matches → losses = total - wins, but simpler to just count
+            )),
+        ])
+
+        const totalPlayed = Number(losses)
+        const teamWins = Number(wins)
+
+        return {
+          ...t,
+          playerCount: Number(playerCount),
+          wins: teamWins,
+          losses: Math.max(0, totalPlayed - teamWins),
+          played: totalPlayed,
+        }
+      })
+    )
+  } catch (error) {
+    console.error("Failed to fetch teams:", error)
+    return []
+  }
+}
+
+// ─── Page ─────────────────────────────────────────────────────
 
 export default async function TeamsPage() {
+  noStore()
+
   const { userId } = await auth()
   if (!userId) redirect("/")
 
+  const tenant = await getMyTenant()
+  if (!tenant) redirect("/dashboard/league/setup")
+
+  const teamsData = await getTeamsData(tenant.id)
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <MotionWrapper variant="fadeInLeft">
           <h1 className="text-3xl font-bold tracking-tight">Teams</h1>
-          <p className="text-muted-foreground mt-1">Manage your cricket teams and squads.</p>
+          <p className="text-muted-foreground mt-1">Manage teams, rosters, and squad composition.</p>
         </MotionWrapper>
         <MotionWrapper variant="fadeInRight">
           <Link href="/dashboard/teams/new">
@@ -33,46 +84,47 @@ export default async function TeamsPage() {
         </MotionWrapper>
       </div>
 
-      {/* Team Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {DEMO_TEAMS.map((team, i) => (
-          <MotionWrapper key={team.id} variant="fadeInUp" delay={0.05 * i}>
-            <Link href={`/dashboard/teams/${team.id}`}>
-              <Card className="hover:shadow-md hover:-translate-y-1 transition-all duration-300 cursor-pointer group overflow-hidden bg-card/80 backdrop-blur-sm border-border/50">
-                {/* Color Bar */}
-                <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${team.primaryColor}, ${team.primaryColor}88)` }} />
-                <CardContent className="pt-5 pb-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-xl flex items-center justify-center font-bold text-lg text-white shadow-md" style={{ backgroundColor: team.primaryColor }}>
-                        {team.shortName}
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-base group-hover:text-primary transition-colors">{team.name}</h3>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{team.city}</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t">
-                    <div className="text-center">
-                      <p className="text-lg font-bold tabular-nums">{team.playerCount}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase">Players</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-bold tabular-nums text-success">{team.wins}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase">Wins</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-bold tabular-nums text-destructive">{team.losses}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase">Losses</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+      {/* Stats */}
+      <MotionWrapper variant="fadeInUp" delay={0.1}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-2xl font-bold tabular-nums">{teamsData.length}</p>
+            <p className="text-xs text-muted-foreground">Total Teams</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-2xl font-bold tabular-nums text-success">{teamsData.filter((t) => t.isActive).length}</p>
+            <p className="text-xs text-muted-foreground">Active</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-2xl font-bold tabular-nums text-info">{teamsData.reduce((sum, t) => sum + t.playerCount, 0)}</p>
+            <p className="text-xs text-muted-foreground">Total Players</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-2xl font-bold tabular-nums">{new Set(teamsData.map((t) => t.city).filter(Boolean)).size}</p>
+            <p className="text-xs text-muted-foreground">Cities</p>
+          </div>
+        </div>
+      </MotionWrapper>
+
+      {/* Teams Grid */}
+      {teamsData.length === 0 ? (
+        <MotionWrapper variant="fadeInUp">
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="rounded-full bg-muted/50 p-5 mb-4">
+              <Shield className="h-10 w-10 text-muted-foreground/40" />
+            </div>
+            <p className="text-lg font-semibold text-muted-foreground">No teams registered yet</p>
+            <p className="text-sm text-muted-foreground/70 mt-1 max-w-sm">Add your first team to start building squads and scheduling matches.</p>
+            <Link href="/dashboard/teams/new">
+              <Button variant="gradient-shine" size="lg" className="mt-6"><Plus className="mr-2 h-4 w-4" />Add First Team</Button>
             </Link>
-          </MotionWrapper>
-        ))}
-      </div>
+          </div>
+        </MotionWrapper>
+      ) : (
+        <MotionWrapper variant="fadeInUp" delay={0.2}>
+          <TeamListGrid initialTeams={teamsData} />
+        </MotionWrapper>
+      )}
     </div>
   )
 }

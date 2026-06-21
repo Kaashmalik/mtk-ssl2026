@@ -14,7 +14,9 @@
       "@mtk/ui": ["../../packages/ui/src/index.ts"],
       "@mtk/ui/*": ["../../packages/ui/src/*"],
       "@mtk/database": ["../../packages/database/src/index.ts"],
-      "@mtk/database/*": ["../../packages/database/src/*"]
+      "@mtk/database/*": ["../../packages/database/src/*"],
+      "@mtk/observability": ["../../packages/observability/src/index.ts"],
+      "@mtk/observability/*": ["../../packages/observability/src/*"]
     },
     "noEmit": true
   },

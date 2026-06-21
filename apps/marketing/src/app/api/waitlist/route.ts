@@ -34,44 +34,36 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseClient(supabaseUrl, supabaseKey);
 
-    // Insert into waitlist table (you'll need to create this table in Supabase)
-    // For now, we'll use a simple approach - you can create a waitlist table later
-    const { data, error } = await supabase
+    // Insert into waitlist table
+    const { error } = await supabase
       .from("waitlist")
       .insert([
         {
           email,
           name,
-          created_at: new Date().toISOString(),
         },
-      ])
-      .select()
-      .single();
+      ]);
 
     if (error) {
-      // If table doesn't exist, we'll just log it and return success
-      // In production, you should create the waitlist table
       console.error("Waitlist insert error:", error);
       
-      // For now, return success even if table doesn't exist
-      // You can create the table later with:
-      // CREATE TABLE waitlist (
-      //   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      //   email TEXT UNIQUE NOT NULL,
-      //   name TEXT NOT NULL,
-      //   created_at TIMESTAMPTZ DEFAULT NOW()
-      // );
+      // Check for duplicate key violation
+      if (error.code === "23505" || error.message?.includes("duplicate key")) {
+        return NextResponse.json(
+          { error: "This email is already registered on our waitlist." },
+          { status: 400 }
+        );
+      }
       
-      return NextResponse.json({
-        success: true,
-        message: "Thank you for joining! We'll be in touch soon.",
-      });
+      return NextResponse.json(
+        { error: "Failed to join waitlist. Please try again." },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
       message: "Thank you for joining! We'll be in touch soon.",
-      data,
     });
   } catch (error) {
     console.error("Waitlist API error:", error);

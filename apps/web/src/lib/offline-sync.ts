@@ -43,7 +43,12 @@ export async function getPendingBalls(matchId: string): Promise<BallData[]> {
   
   return all
     .filter((b) => b.matchId === matchId && !b.synced)
-    .map(({ matchId, synced, ...ball }) => ball);
+    .map((ball) => {
+      const { matchId: matchIdValue, synced: syncedValue, ...rest } = ball;
+      void matchIdValue;
+      void syncedValue;
+      return rest;
+    });
 }
 
 export async function markBallSynced(ballId: string): Promise<void> {

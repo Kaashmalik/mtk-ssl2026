@@ -2,11 +2,13 @@
 
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
-import { db } from "@mtk/database"
+import { db, PLAN_LIMITS } from "@mtk/database"
+import { type PlanKey } from "@mtk/database"
 import { teams, players, tournaments } from "@mtk/database"
 import { eq, and, ilike, desc, asc, count } from "drizzle-orm"
 import { z } from "zod"
 import { getMyTenant } from "@/app/actions/tenants"
+import { withAuth } from "./action-guard"
 
 // ─── Validation Schemas ───────────────────────────────────────
 
@@ -62,15 +64,33 @@ function generateSlug(name: string): string {
 
 // ─── Actions ──────────────────────────────────────────────────
 
-export async function createTeam(input: CreateTeamInput) {
+export const createTeam = withAuth("team:create", async (input: CreateTeamInput) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
+
+  // ─── Plan-based team quota check ────────────────────────────────
+  const planLimits = PLAN_LIMITS[tenant.plan as PlanKey] ?? PLAN_LIMITS.free
+  if (planLimits.maxTeams !== Infinity) {
+    const [{ teamCount }] = await db
+      .select({ teamCount: count() })
+      .from(teams)
+      .where(eq(teams.tenantId, tenant.id))
+
+    if (Number(teamCount) >= planLimits.maxTeams) {
+      throw new Error(
+        `Your ${tenant.plan} plan allows a maximum of ${planLimits.maxTeams} teams. ` +
+        `Upgrade your plan to create more teams.`
+      )
+    }
+  }
+
   const validated = createTeamSchema.parse({
     ...input,
     tenantId: input.tenantId ?? tenant.id,
   })
-  if (validated.tenantId !== tenant.id) throw new Error("Invalid tenant")
+  const tenantId = validated.tenantId ?? tenant.id
+  if (tenantId !== tenant.id) throw new Error("Invalid tenant")
   const slug = validated.slug || generateSlug(validated.name)
 
   if (validated.tournamentId) {
@@ -82,6 +102,7 @@ export async function createTeam(input: CreateTeamInput) {
 
   const [team] = await db.insert(teams).values({
     ...validated,
+    tenantId,
     slug,
     createdBy: userId,
   }).returning()
@@ -89,9 +110,9 @@ export async function createTeam(input: CreateTeamInput) {
   revalidatePath("/dashboard/teams")
   revalidatePath("/dashboard")
   return { success: true, team }
-}
+})
 
-export async function updateTeam(id: string, input: UpdateTeamInput) {
+export const updateTeam = withAuth("team:update", async (id: string, input: UpdateTeamInput) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -123,9 +144,9 @@ export async function updateTeam(id: string, input: UpdateTeamInput) {
   revalidatePath("/dashboard/teams")
   revalidatePath(`/dashboard/teams/${id}`)
   return { success: true, team }
-}
+})
 
-export async function deleteTeam(id: string) {
+export const deleteTeam = withAuth("team:delete", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -135,9 +156,9 @@ export async function deleteTeam(id: string) {
   revalidatePath("/dashboard/teams")
   revalidatePath("/dashboard")
   return { success: true }
-}
+})
 
-export async function getTeam(id: string) {
+export const getTeam = withAuth("team:read", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -145,9 +166,9 @@ export async function getTeam(id: string) {
     .where(and(eq(teams.id, id), eq(teams.tenantId, tenant.id)))
     .limit(1)
   return team ?? null
-}
+})
 
-export async function getTeamWithRoster(id: string) {
+export const getTeamWithRoster = withAuth("team:read", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -161,9 +182,9 @@ export async function getTeamWithRoster(id: string) {
     .orderBy(asc(players.name))
 
   return { ...team, players: roster }
-}
+})
 
-export async function getTeams(filters: TeamFilters) {
+export const getTeams = withAuth("team:read", async (filters: TeamFilters) => {
   const tenant = await requireTenant()
   const validated = teamFiltersSchema.parse({ ...filters, tenantId: tenant.id })
   const { tournamentId, search, isActive, page, pageSize, sortBy, sortOrder } = validated
@@ -198,9 +219,9 @@ export async function getTeams(filters: TeamFilters) {
       totalPages: Math.ceil(Number(total) / pageSize),
     },
   }
-}
+})
 
-export async function addPlayerToTeam(teamId: string, playerId: string) {
+export const addPlayerToTeam = withAuth("team:manage_roster", async (teamId: string, playerId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -220,9 +241,9 @@ export async function addPlayerToTeam(teamId: string, playerId: string) {
   revalidatePath(`/dashboard/teams/${teamId}`)
   revalidatePath(`/dashboard/players/${playerId}`)
   return { success: true, player }
-}
+})
 
-export async function removePlayerFromTeam(teamId: string, playerId: string) {
+export const removePlayerFromTeam = withAuth("team:manage_roster", async (teamId: string, playerId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -242,4 +263,4 @@ export async function removePlayerFromTeam(teamId: string, playerId: string) {
   revalidatePath(`/dashboard/teams/${teamId}`)
   revalidatePath(`/dashboard/players/${playerId}`)
   return { success: true }
-}
+})

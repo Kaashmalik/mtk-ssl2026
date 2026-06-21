@@ -1,7 +1,9 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import { join } from 'path';
 import { HealthModule } from './health/health.module';
 import { ProxyModule } from './proxy/proxy.module';
 import { AuthMiddleware } from './middleware/auth.middleware';
@@ -37,6 +39,30 @@ import { RedisModule } from './redis/redis.module';
       ],
     }),
 
+    // gRPC Auth client
+    ClientsModule.registerAsync([
+      {
+        name: 'AUTH_SERVICE',
+        imports: [ConfigModule],
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.GRPC,
+          options: {
+            package: 'auth',
+            protoPath: join(__dirname, './proto/auth.proto'),
+            url: `${configService.get('AUTH_SERVICE_HOST', 'localhost')}:${configService.get('AUTH_SERVICE_PORT', 5001)}`,
+            loader: {
+              keepCase: true,
+              longs: String,
+              enums: String,
+              defaults: true,
+              oneofs: true,
+            },
+          },
+        }),
+      },
+    ]),
+
     // Modules
     RedisModule,
     HealthModule,
@@ -56,3 +82,4 @@ export class AppModule implements NestModule {
       .forRoutes('*');
   }
 }
+

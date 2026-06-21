@@ -7,6 +7,8 @@ import { matches, teams, tournaments } from "@mtk/database"
 import { eq, and, desc, asc, count, or } from "drizzle-orm"
 import { z } from "zod"
 import { getMyTenant } from "@/app/actions/tenants"
+import { withAuth } from "./action-guard"
+
 
 const createMatchSchema = z.object({
   tenantId: z.string().uuid().optional(),
@@ -43,7 +45,7 @@ async function requireTenant() {
   return tenant
 }
 
-export async function createMatch(input: CreateMatchInput) {
+export const createMatch = withAuth("match:create", async (input: CreateMatchInput) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -51,7 +53,8 @@ export async function createMatch(input: CreateMatchInput) {
     ...input,
     tenantId: input.tenantId ?? tenant.id,
   })
-  if (validated.tenantId !== tenant.id) throw new Error("Invalid tenant")
+  const tenantId = validated.tenantId ?? tenant.id
+  if (tenantId !== tenant.id) throw new Error("Invalid tenant")
   if (validated.teamAId === validated.teamBId) throw new Error("A team cannot play against itself")
 
   const [teamA] = await db.select().from(teams)
@@ -70,7 +73,8 @@ export async function createMatch(input: CreateMatchInput) {
   }
   
   const [match] = await db.insert(matches).values({ 
-    ...validated, 
+    ...validated,
+    tenantId,
     scheduledDate: validated.scheduledDate ? new Date(validated.scheduledDate) : null,
     status: "scheduled", 
     createdBy: userId 
@@ -79,15 +83,19 @@ export async function createMatch(input: CreateMatchInput) {
   revalidatePath("/dashboard/matches")
   revalidatePath("/dashboard")
   return { success: true, match }
-}
+})
 
-export async function updateMatch(id: string, input: Partial<CreateMatchInput>) {
+export const updateMatch = withAuth("match:update", async (id: string, input: Partial<CreateMatchInput>) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const cleanData = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))
-  if ("tenantId" in cleanData) {
-    delete (cleanData as { tenantId?: string }).tenantId
+  const cleanData = Object.fromEntries(
+    Object.entries(input).filter(([, v]) => v !== undefined)
+  ) as Omit<Partial<CreateMatchInput>, "scheduledDate"> & {
+    scheduledDate?: Date | null;
+  };
+  if (cleanData.tenantId) {
+    delete cleanData.tenantId;
   }
 
   if (cleanData.teamAId || cleanData.teamBId) {
@@ -104,6 +112,10 @@ export async function updateMatch(id: string, input: Partial<CreateMatchInput>) 
       .limit(1)
     if (!tournament) throw new Error("Tournament not found")
   }
+  if ("scheduledDate" in cleanData) {
+    const scheduledDate = cleanData.scheduledDate as string | null | undefined
+    cleanData.scheduledDate = scheduledDate ? new Date(scheduledDate) : null
+  }
   const [match] = await db.update(matches).set({ ...cleanData, updatedAt: new Date() })
     .where(and(eq(matches.id, id), eq(matches.tenantId, tenant.id)))
     .returning()
@@ -111,9 +123,9 @@ export async function updateMatch(id: string, input: Partial<CreateMatchInput>) 
   revalidatePath("/dashboard/matches")
   revalidatePath(`/dashboard/matches/${id}`)
   return { success: true, match }
-}
+})
 
-export async function deleteMatch(id: string) {
+export const deleteMatch = withAuth("match:delete", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -121,9 +133,9 @@ export async function deleteMatch(id: string) {
   revalidatePath("/dashboard/matches")
   revalidatePath("/dashboard")
   return { success: true }
-}
+})
 
-export async function getMatch(id: string) {
+export const getMatch = withAuth("match:read", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -131,9 +143,9 @@ export async function getMatch(id: string) {
     .where(and(eq(matches.id, id), eq(matches.tenantId, tenant.id)))
     .limit(1)
   return match ?? null
-}
+})
 
-export async function getMatches(filters: MatchFilters) {
+export const getMatches = withAuth("match:read", async (filters: MatchFilters) => {
   const tenant = await requireTenant()
   const validated = matchFiltersSchema.parse({ ...filters, tenantId: tenant.id })
   const { tournamentId, teamId, status, page, pageSize, sortBy, sortOrder } = validated
@@ -150,9 +162,9 @@ export async function getMatches(filters: MatchFilters) {
     db.select({ total: count() }).from(matches).where(whereClause),
   ])
   return { data, pagination: { page, pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / pageSize) } }
-}
+})
 
-export async function setTossResult(matchId: string, tossWinnerId: string, tossDecision: "bat" | "bowl") {
+export const setTossResult = withAuth("match:score", async (matchId: string, tossWinnerId: string, tossDecision: "bat" | "bowl") => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -163,9 +175,9 @@ export async function setTossResult(matchId: string, tossWinnerId: string, tossD
   if (!match) throw new Error("Match not found")
   revalidatePath(`/dashboard/matches/${matchId}`)
   return { success: true, match }
-}
+})
 
-export async function startMatch(matchId: string) {
+export const startMatch = withAuth("match:score", async (matchId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -176,9 +188,9 @@ export async function startMatch(matchId: string) {
   if (!match) throw new Error("Match not found")
   revalidatePath(`/dashboard/matches/${matchId}`)
   return { success: true, match }
-}
+})
 
-export async function endMatch(matchId: string, winnerId: string | null, result: string) {
+export const endMatch = withAuth("match:score", async (matchId: string, winnerId: string | null, result: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -190,4 +202,4 @@ export async function endMatch(matchId: string, winnerId: string | null, result:
   revalidatePath(`/dashboard/matches/${matchId}`)
   revalidatePath("/dashboard/matches")
   return { success: true, match }
-}
+})

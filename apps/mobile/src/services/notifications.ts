@@ -1,14 +1,23 @@
-import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import i18n from "@/lib/i18n";
 
 const API_URL = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL || "http://localhost:4000";
 
+const isExpoGo = Constants.appOwnership === "expo";
+
+const getNotifications = () => {
+  return require("expo-notifications") as any;
+};
+
 /**
  * Register device for push notifications
  */
 export async function registerForPushNotifications() {
+  if (isExpoGo) {
+    return null;
+  }
   try {
+    const Notifications = getNotifications();
     const token = await Notifications.getExpoPushTokenAsync({
       projectId: Constants.expoConfig?.extra?.eas?.projectId,
     });
@@ -27,6 +36,7 @@ export async function registerForPushNotifications() {
 
     return token.data;
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error("Error registering for push notifications:", error);
     return null;
   }
@@ -36,6 +46,8 @@ export async function registerForPushNotifications() {
  * Send local notification for wicket
  */
 export async function notifyWicket(batsmanName: string) {
+  if (isExpoGo) return;
+  const Notifications = getNotifications();
   await Notifications.scheduleNotificationAsync({
     content: {
       title: i18n.t("match.wicket"),
@@ -51,6 +63,8 @@ export async function notifyWicket(batsmanName: string) {
  * Send local notification for match start
  */
 export async function notifyMatchStart(team1Name: string, team2Name: string, matchId: string) {
+  if (isExpoGo) return;
+  const Notifications = getNotifications();
   await Notifications.scheduleNotificationAsync({
     content: {
       title: i18n.t("match.start"),
@@ -66,6 +80,8 @@ export async function notifyMatchStart(team1Name: string, team2Name: string, mat
  * Send local notification for match update
  */
 export async function notifyMatchUpdate(teamName: string, score: string) {
+  if (isExpoGo) return;
+  const Notifications = getNotifications();
   await Notifications.scheduleNotificationAsync({
     content: {
       title: i18n.t("liveScore"),

@@ -1,3 +1,4 @@
+
 import { createSupabaseServerClient } from "@mtk/database";
 import { SupabaseClient } from "@supabase/supabase-js";
 
@@ -16,11 +17,4 @@ export function getSupabaseServer(): SupabaseClient {
   return createSupabaseServerClient(supabaseUrl, supabaseServiceKey);
 }
 
-/**
- * Check if user is super admin
- */
-export async function isSuperAdmin(email: string): Promise<boolean> {
-  const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "kashif@maliktech.pk";
-  return email === SUPER_ADMIN_EMAIL;
-}
-
+export { isSuperAdmin } from "./admin-auth";

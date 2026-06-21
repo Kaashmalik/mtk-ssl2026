@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { RevenueDashboard } from "@/components/revenue/revenue-dashboard";
+import { buildMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildMetadata({
+  title: "Revenue Dashboard",
+  description: "Track monthly recurring revenue (MRR), annual recurring revenue (ARR), churn, and plan-level revenue breakdown across all SSL tenants.",
+  path: "/revenue",
+});
 
 export default function RevenuePage() {
   return (

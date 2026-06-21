@@ -11,7 +11,7 @@ export interface Match {
   team2Wickets?: number;
   team1Overs?: number;
   team2Overs?: number;
-  status: "upcoming" | "live" | "completed";
+  status: "scheduled" | "toss" | "live" | "innings_break" | "completed" | "abandoned" | "cancelled" | "no_result" | "upcoming";
   scheduledAt?: string;
   startedAt?: string;
   completedAt?: string;

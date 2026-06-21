@@ -8,7 +8,7 @@ export function useDeepLinking() {
   const router = useRouter();
 
   const handleDeepLink = (url: string) => {
-    const { path, queryParams } = Linking.parse(url);
+    const { path } = Linking.parse(url);
 
     // Handle ssl.cricket/match/abc or ssl://match/abc
     if (path?.includes("/match/") || path?.startsWith("match/")) {

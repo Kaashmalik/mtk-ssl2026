@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { db } from "@mtk/database";
+import { db, PLAN_LIMITS } from "@mtk/database";
 import { tenants, tenantBranding } from "@mtk/database";
 import { eq } from "drizzle-orm";
 import { isSuperAdmin } from "@/lib/super-admin";
+import { type PlanKey } from "@mtk/database";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(request: NextRequest) {
@@ -85,6 +86,34 @@ export async function PUT(request: NextRequest) {
     }
 
     const tenantId = tenant[0].id;
+    const tenantPlan = tenant[0].plan as PlanKey;
+
+    // ─── Plan-based feature gating ────────────────────────────────
+    // White-label (hideSslBranding, custom fonts, mobile app branding)
+    // requires pro or enterprise.
+    const planLimits = PLAN_LIMITS[tenantPlan] ?? PLAN_LIMITS.free;
+    const isWhiteLabelAllowed = planLimits.whiteLabel === true;
+
+    if (!isWhiteLabelAllowed) {
+      const gatedFields = ["hideSslBranding", "fontFamily", "mobileAppIconUrl", "mobileAppSplashUrl", "mobileAppBundleId", "mobileAppPackageName"] as const;
+      const requestedGatedField = gatedFields.find((f) => body[f] !== undefined && body[f] !== null && body[f] !== false);
+      if (requestedGatedField) {
+        return NextResponse.json(
+          {
+            error: `White-label customization (${requestedGatedField}) requires Pro or Enterprise plan. Please upgrade your plan.`,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Custom domain requires enterprise plan
+    if (body.customDomain && !PLAN_LIMITS[tenantPlan]?.customDomain) {
+      return NextResponse.json(
+        { error: "Custom domains require Enterprise plan. Please upgrade your plan." },
+        { status: 403 }
+      );
+    }
 
     // Update custom domain if provided
     if (body.customDomain !== undefined) {

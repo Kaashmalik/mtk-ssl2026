@@ -1,13 +1,16 @@
-import { View, Text, ScrollView, StyleSheet, RefreshControl } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { View, Text, ScrollView, StyleSheet, RefreshControl, TouchableOpacity } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useMatchStore } from "@/store/match-store";
 import { useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useOfflineStore } from "@/store/offline-store";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { ErrorView } from "@/components/ErrorView";
 
 export default function MatchScreen() {
   const { matchId } = useLocalSearchParams<{ matchId: string }>();
+  const router = useRouter();
   const { t } = useTranslation();
   const { currentMatch, fetchMatch, subscribeToMatch, loading } = useMatchStore();
   const { isOnline } = useOfflineStore();
@@ -20,11 +23,16 @@ export default function MatchScreen() {
     }
   }, [matchId]);
 
-  if (loading || !currentMatch) {
+  if (loading && !currentMatch) {
+    return <LoadingSpinner message="Loading match details..." />;
+  }
+
+  if (!currentMatch) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>{t("loading")}</Text>
-      </View>
+      <ErrorView
+        message="Match not found"
+        onRetry={() => matchId && fetchMatch(matchId)}
+      />
     );
   }
 
@@ -53,6 +61,13 @@ export default function MatchScreen() {
         />
       }
     >
+      <View style={styles.hero}>
+        <Text style={styles.heroTitle}>Match Center</Text>
+        <Text style={styles.heroSubtitle}>
+          {currentMatch.team1Name} vs {currentMatch.team2Name}
+        </Text>
+      </View>
+
       {/* Match Header */}
       <View style={styles.header}>
         <View style={styles.statusBar}>
@@ -172,6 +187,17 @@ export default function MatchScreen() {
           </View>
         )}
       </View>
+
+      {/* Scoring Action (if live/upcoming) */}
+      {(currentMatch.status === "live" || currentMatch.status === "upcoming" || currentMatch.status === "scheduled" || currentMatch.status === "toss" || currentMatch.status === "innings_break") && (
+        <TouchableOpacity
+          style={styles.scoreButton}
+          onPress={() => router.push(`/scoring/${matchId}`)}
+        >
+          <Ionicons name="game-controller" size={20} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.scoreButtonText}>Open Mobile Scoring Console</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -179,13 +205,36 @@ export default function MatchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#f6f7fb",
+  },
+  hero: {
+    backgroundColor: "#16a34a",
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  heroSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    color: "#dcfce7",
   },
   header: {
     backgroundColor: "#fff",
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
   },
   statusBar: {
     flexDirection: "row",
@@ -233,29 +282,38 @@ const styles = StyleSheet.create({
   scoreCard: {
     backgroundColor: "#fff",
     margin: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
   },
   teamCard: {
-    padding: 20,
-    alignItems: "center",
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 14,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
   },
   teamName: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#111827",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   score: {
     fontSize: 32,
     fontWeight: "bold",
     color: "#16a34a",
-    marginBottom: 4,
   },
   overs: {
     fontSize: 16,
@@ -309,6 +367,26 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     padding: 20,
     fontSize: 16,
+  },
+  scoreButton: {
+    backgroundColor: "#16a34a",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    marginHorizontal: 16,
+    marginBottom: 24,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  scoreButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 

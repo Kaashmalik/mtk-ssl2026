@@ -1,44 +1,80 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { getSupabaseServer, isSuperAdmin } from "@/lib/supabase-server";
+import { randomBytes } from "node:crypto";
+import { verifySuperAdmin } from "@/lib/admin-auth";
+import {
+  db,
+  whiteLabelRequests,
+  tenants,
+  tenantBranding,
+  dnsVerifications,
+} from "@mtk/database";
+import { and, desc, eq } from "drizzle-orm";
+import { captureError, getRequestLogger } from "@mtk/observability";
 
 export async function GET(request: NextRequest) {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const supabase = getSupabaseServer();
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get("status") || "pending";
+    const status = (searchParams.get("status") || "pending") as any;
 
-    const { data, error } = await supabase
-      .from("white_label_requests")
-      .select(`
-        *,
-        tenants:tenant_id (
-          id,
-          name,
-          slug,
-          plan
-        )
-      `)
-      .eq("status", status)
-      .order("created_at", { ascending: false });
+    const data = await db
+      .select({
+        id: whiteLabelRequests.id,
+        tenantId: whiteLabelRequests.tenantId,
+        requestedBy: whiteLabelRequests.requestedBy,
+        status: whiteLabelRequests.status,
+        customDomain: whiteLabelRequests.customDomain,
+        hideBranding: whiteLabelRequests.hideBranding,
+        customAppName: whiteLabelRequests.customAppName,
+        reason: whiteLabelRequests.reason,
+        adminNotes: whiteLabelRequests.adminNotes,
+        reviewedBy: whiteLabelRequests.reviewedBy,
+        reviewedAt: whiteLabelRequests.reviewedAt,
+        createdAt: whiteLabelRequests.createdAt,
+        updatedAt: whiteLabelRequests.updatedAt,
+        tenant: {
+          id: tenants.id,
+          name: tenants.name,
+          slug: tenants.slug,
+          plan: tenants.plan,
+        }
+      })
+      .from(whiteLabelRequests)
+      .innerJoin(tenants, eq(whiteLabelRequests.tenantId, tenants.id))
+      .where(eq(whiteLabelRequests.status, status))
+      .orderBy(desc(whiteLabelRequests.createdAt));
 
-    if (error) throw error;
+    const requests = data.map((item) => ({
+      id: item.id,
+      tenant_id: item.tenantId,
+      requested_by: item.requestedBy,
+      status: item.status,
+      custom_domain: item.customDomain,
+      hide_branding: item.hideBranding,
+      custom_app_name: item.customAppName,
+      reason: item.reason,
+      admin_notes: item.adminNotes,
+      reviewed_by: item.reviewedBy,
+      reviewed_at: item.reviewedAt ? item.reviewedAt.toISOString() : null,
+      created_at: item.createdAt.toISOString(),
+      updated_at: item.updatedAt.toISOString(),
+      tenants: item.tenant,
+    }));
 
-    return NextResponse.json({ requests: data || [] });
+    return NextResponse.json({ requests });
   } catch (error) {
-    console.error("White-label requests API error:", error);
+    getRequestLogger().error("White-label requests API error", error);
+    await captureError(error, {
+      level: "error",
+      context: { adminId, path: "/api/white-label" },
+      tags: { source: "white-label", method: "GET" },
+    });
     return NextResponse.json(
       { error: "Failed to fetch white-label requests" },
       { status: 500 }
@@ -47,19 +83,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const { requestId, status, adminNotes } = await request.json();
 
     if (!requestId || !status) {
@@ -69,75 +98,169 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("white_label_requests")
-      .update({
+    const [data] = await db
+      .update(whiteLabelRequests)
+      .set({
         status,
-        admin_notes: adminNotes,
-        reviewed_by: userId,
-        reviewed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        adminNotes: adminNotes || null,
+        reviewedBy: adminId,
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
       })
-      .eq("id", requestId)
-      .select()
-      .single();
+      .where(eq(whiteLabelRequests.id, requestId))
+      .returning();
 
-    if (error) throw error;
+    if (!data) {
+      return NextResponse.json(
+        { error: "Request not found" },
+        { status: 404 }
+      );
+    }
 
     if (data) {
       if (status === "approved") {
-        await supabase
-          .from("tenant_branding")
-          .upsert({
-            tenant_id: data.tenant_id,
-            hide_ssl_branding: data.hide_branding,
-            app_name: data.custom_app_name,
-            updated_at: new Date().toISOString(),
+        await db
+          .insert(tenantBranding)
+          .values({
+            tenantId: data.tenantId,
+            hideSslBranding: data.hideBranding,
+            appName: data.customAppName || null,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: tenantBranding.tenantId,
+            set: {
+              hideSslBranding: data.hideBranding,
+              appName: data.customAppName || null,
+              updatedAt: new Date(),
+            }
           });
 
-        if (data.custom_domain) {
-          await supabase
-            .from("tenants")
-            .update({
-              custom_domain: data.custom_domain,
-              custom_domain_verified: false,
-              custom_domain_verified_at: null,
-              updated_at: new Date().toISOString(),
+        if (data.customDomain) {
+          await db
+            .update(tenants)
+            .set({
+              customDomain: data.customDomain,
+              customDomainVerified: false,
+              customDomainVerifiedAt: null,
+              updatedAt: new Date(),
             })
-            .eq("id", data.tenant_id);
+            .where(eq(tenants.id, data.tenantId));
+
+          // --- Auto-create the DNS ownership verification record ---
+          // This bridges the gap between approval and the verification flow:
+          // previously the tenant had no way to know WHICH TXT record to add
+          // until a super-admin manually visited the branding settings page.
+          // Now approval immediately issues a verification token.
+          await createDnsVerificationForDomain(data.tenantId, data.customDomain);
         }
       }
 
       if (status === "revoked") {
-        await supabase
-          .from("tenant_branding")
-          .upsert({
-            tenant_id: data.tenant_id,
-            hide_ssl_branding: false,
-            app_name: null,
-            updated_at: new Date().toISOString(),
+        await db
+          .insert(tenantBranding)
+          .values({
+            tenantId: data.tenantId,
+            hideSslBranding: false,
+            appName: null,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: tenantBranding.tenantId,
+            set: {
+              hideSslBranding: false,
+              appName: null,
+              updatedAt: new Date(),
+            }
           });
 
-        await supabase
-          .from("tenants")
-          .update({
-            custom_domain: null,
-            custom_domain_verified: false,
-            custom_domain_verified_at: null,
-            updated_at: new Date().toISOString(),
+        await db
+          .update(tenants)
+          .set({
+            customDomain: null,
+            customDomainVerified: false,
+            customDomainVerifiedAt: null,
+            updatedAt: new Date(),
           })
-          .eq("id", data.tenant_id);
+          .where(eq(tenants.id, data.tenantId));
       }
     }
 
-    return NextResponse.json({ request: data });
+    // Map to snake_case format for return
+    const mappedResponse = {
+      id: data.id,
+      tenant_id: data.tenantId,
+      requested_by: data.requestedBy,
+      status: data.status,
+      custom_domain: data.customDomain,
+      hide_branding: data.hideBranding,
+      custom_app_name: data.customAppName,
+      reason: data.reason,
+      admin_notes: data.adminNotes,
+      reviewed_by: data.reviewedBy,
+      reviewed_at: data.reviewedAt ? data.reviewedAt.toISOString() : null,
+      created_at: data.createdAt.toISOString(),
+      updated_at: data.updatedAt.toISOString(),
+    };
+
+    return NextResponse.json({ request: mappedResponse });
   } catch (error) {
-    console.error("Update white-label request error:", error);
+    getRequestLogger().error("Update white-label request error", error);
+    await captureError(error, {
+      level: "error",
+      context: { adminId, path: "/api/white-label" },
+      tags: { source: "white-label", method: "PATCH" },
+    });
     return NextResponse.json(
       { error: "Failed to update white-label request" },
       { status: 500 }
     );
   }
 }
+
+/**
+ * Create (or refresh) the DNS ownership verification record for a domain.
+ *
+ * Generates a random token, stores it in dns_verifications with status
+ * 'pending', and sets a 7-day expiry. The tenant then adds the TXT record:
+ *
+ *   _ssl-verify.<domain>  TXT  ssl-verify-<token>
+ *
+ * The web app's /api/dns/verify route checks this record against live DNS.
+ *
+ * If a pending verification already exists for this tenant+domain, it is
+ * replaced (revoked) so there's only ever one active token.
+ */
+async function createDnsVerificationForDomain(
+  tenantId: string,
+  domain: string
+): Promise<void> {
+  const token = randomBytes(16).toString("hex"); // 32 hex chars
+  const expectedValue = `ssl-verify-${token}`;
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  // Revoke any existing pending verification for this tenant+domain so the
+  // tenant only ever sees one valid token.
+  await db
+    .update(dnsVerifications)
+    .set({ status: "expired", updatedAt: new Date() })
+    .where(
+      and(
+        eq(dnsVerifications.tenantId, tenantId),
+        eq(dnsVerifications.domain, domain),
+        eq(dnsVerifications.status, "pending")
+      )
+    );
+
+  await db.insert(dnsVerifications).values({
+    tenantId,
+    domain,
+    verificationToken: token,
+    verificationType: "txt",
+    expectedValue,
+    status: "pending",
+    expiresAt,
+  });
+}
+
 

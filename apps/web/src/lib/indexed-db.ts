@@ -5,7 +5,7 @@ interface SSLDatabase extends DBSchema {
     key: string;
     value: {
       id: string;
-      data: any;
+      data: unknown;
       updatedAt: number;
       syncStatus: 'synced' | 'pending';
     };
@@ -31,7 +31,7 @@ export function initDB() {
   return dbPromise;
 }
 
-export async function saveMatchOffline(id: string, data: any) {
+export async function saveMatchOffline(id: string, data: unknown) {
   const db = await initDB();
   if (!db) return;
   

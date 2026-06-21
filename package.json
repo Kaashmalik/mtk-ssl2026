@@ -32,5 +32,14 @@
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "overrides": {
+      "web-streams-polyfill": "3.3.3",
+      "formdata-node>web-streams-polyfill": "3.3.3"
+    }
+  },
+  "dependencies": {
+    "react-native-url-polyfill": "^3.0.0"
+  }
 }

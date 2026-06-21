@@ -35,9 +35,17 @@ export function createSupabaseServerClient(url: string, serviceRoleKey: string) 
  */
 const connectionString = process.env.DATABASE_URL || "postgresql://ssl:ssl_dev_password@localhost:5432/ssl_dev";
 
-// For query purposes (connection pooling)
-const queryClient = postgres(connectionString);
+// For query purposes (connection pooling with max 20 connections)
+export const queryClient = postgres(connectionString, {
+  max: 20,
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
 
 // Drizzle ORM instance
 export const db = drizzle(queryClient, { schema });
+
+export async function closeDbConnection() {
+  await queryClient.end({ timeout: 5 });
+}
 

@@ -57,8 +57,10 @@ interface VerificationStatus {
   verificationType?: string;
   expectedValue?: string;
   spfRecord?: string;
+  dmarcRecord?: string;
   dkimPublicKey?: string;
   dkimSelector?: string;
+  domain?: string;
 }
 
 interface LeagueOption {
@@ -484,7 +486,7 @@ export function BrandingSettings() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => loadDnsVerification(customDomain)}
+                        onClick={() => loadDnsVerification(selectedLeagueId, customDomain)}
                       >
                         Check Verification
                       </Button>
@@ -577,15 +579,24 @@ export function BrandingSettings() {
                         <p className="text-sm font-medium mb-2">Add these DNS records:</p>
                         {emailVerification.spfRecord && (
                           <div className="mb-2">
-                            <p className="text-xs font-mono text-muted-foreground">SPF (TXT):</p>
-                            <p className="text-sm font-mono">{emailVerification.spfRecord}</p>
+                            <p className="text-xs font-mono text-muted-foreground">SPF (TXT on root domain):</p>
+                            <p className="text-sm font-mono break-all">{emailVerification.spfRecord}</p>
+                          </div>
+                        )}
+                        {emailVerification.dmarcRecord && (
+                          <div className="mb-2">
+                            <p className="text-xs font-mono text-muted-foreground">
+                              DMARC (TXT on _dmarc.{emailVerification.domain || "yourdomain"}):
+                            </p>
+                            <p className="text-sm font-mono break-all">{emailVerification.dmarcRecord}</p>
                           </div>
                         )}
                         {emailVerification.dkimPublicKey && (
                           <div>
-                            <p className="text-xs font-mono text-muted-foreground">DKIM (TXT):</p>
-                            <p className="text-sm font-mono">{emailVerification.dkimSelector}._domainkey</p>
-                            <p className="text-sm font-mono">{emailVerification.dkimPublicKey}</p>
+                            <p className="text-xs font-mono text-muted-foreground">
+                              DKIM (TXT on {emailVerification.dkimSelector}._domainkey):
+                            </p>
+                            <p className="text-sm font-mono break-all">{emailVerification.dkimPublicKey}</p>
                           </div>
                         )}
                       </div>
@@ -593,7 +604,7 @@ export function BrandingSettings() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => loadEmailVerification(emailSenderAddress)}
+                        onClick={() => loadEmailVerification(selectedLeagueId, emailSenderAddress)}
                       >
                         Check Verification
                       </Button>

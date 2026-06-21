@@ -36,6 +36,15 @@ spec:
             summary: "High latency on {{ $labels.service }}"
             description: "P95 latency is {{ $value }}s on {{ $labels.service }}"
 
+        - alert: TenantQuotaExceeded
+          expr: sum(rate(ssl_tenant_quota_violations_total[5m])) by (tenant) > 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Tenant quota exceeded"
+            description: "Tenant {{ $labels.tenant }} has triggered {{ $value }} quota violations in the last 5 minutes"
+
         - alert: ServiceDown
           expr: up{job=~"ssl-.*"} == 0
           for: 1m
@@ -44,6 +53,7 @@ spec:
           annotations:
             summary: "Service {{ $labels.job }} is down"
             description: "{{ $labels.instance }} of {{ $labels.job }} has been down for more than 1 minute"
+
 
     # ============================================
     # Scoring Service Alerts
