@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Building2, Trophy, Users2, PersonStanding,
   Calendar, Radio, Mic2, MapPin, DollarSign, Megaphone,
-  ToggleLeft, Activity, ShieldCheck, ChevronRight,
+  ToggleLeft, Activity, ShieldCheck, ChevronRight, CreditCard,
 } from "lucide-react";
 
 const navGroups = [
@@ -38,6 +38,7 @@ const navGroups = [
     items: [
       { name: "Users",         href: "/users",         icon: Users2 },
       { name: "Revenue",       href: "/revenue",       icon: DollarSign },
+      { name: "Payments",      href: "/payments",      icon: CreditCard },
       { name: "Branding",      href: "/white-label",   icon: ShieldCheck },
       { name: "Waitlist",      href: "/waitlist",      icon: Megaphone },
       { name: "Announcements", href: "/announcements", icon: Megaphone },

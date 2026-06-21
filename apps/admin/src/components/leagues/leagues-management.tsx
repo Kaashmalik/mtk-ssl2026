@@ -71,25 +71,25 @@ export function LeaguesManagement() {
               <div className="flex-1">
                 <div className="font-semibold">{league.name}</div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  {league.slug} • {league.plan} • Created {new Date(league.created_at).toLocaleDateString()}
+                  {league.slug} • {league.plan} • Created {new Date(league.createdAt).toLocaleDateString()}
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <div
                   className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    league.is_active
+                    league.isActive
                       ? "bg-green-500/20 text-green-500"
                       : "bg-red-500/20 text-red-500"
                   }`}
                 >
-                  {league.is_active ? "Active" : "Suspended"}
+                  {league.isActive ? "Active" : "Suspended"}
                 </div>
                 <Button
-                  variant={league.is_active ? "destructive" : "default"}
+                  variant={league.isActive ? "destructive" : "default"}
                   size="sm"
-                  onClick={() => toggleLeagueStatus(league.id, league.is_active)}
+                  onClick={() => toggleLeagueStatus(league.id, league.isActive)}
                 >
-                  {league.is_active ? "Suspend" : "Activate"}
+                  {league.isActive ? "Suspend" : "Activate"}
                 </Button>
               </div>
             </motion.div>

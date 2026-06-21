@@ -36,6 +36,7 @@ export * from "./commentary-events";
 
 // Billing & Subscriptions
 export * from "./subscriptions";
+export * from "./subscription-requests";
 export * from "./fantasy-leagues";
 
 // System & Admin

@@ -2,7 +2,8 @@
 
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
-import { db } from "@mtk/database"
+import { db, PLAN_LIMITS } from "@mtk/database"
+import { type PlanKey } from "@mtk/database"
 import { teams, players, tournaments } from "@mtk/database"
 import { eq, and, ilike, desc, asc, count } from "drizzle-orm"
 import { z } from "zod"
@@ -67,6 +68,23 @@ export const createTeam = withAuth("team:create", async (input: CreateTeamInput)
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
+
+  // ─── Plan-based team quota check ────────────────────────────────
+  const planLimits = PLAN_LIMITS[tenant.plan as PlanKey] ?? PLAN_LIMITS.free
+  if (planLimits.maxTeams !== Infinity) {
+    const [{ teamCount }] = await db
+      .select({ teamCount: count() })
+      .from(teams)
+      .where(eq(teams.tenantId, tenant.id))
+
+    if (Number(teamCount) >= planLimits.maxTeams) {
+      throw new Error(
+        `Your ${tenant.plan} plan allows a maximum of ${planLimits.maxTeams} teams. ` +
+        `Upgrade your plan to create more teams.`
+      )
+    }
+  }
+
   const validated = createTeamSchema.parse({
     ...input,
     tenantId: input.tenantId ?? tenant.id,

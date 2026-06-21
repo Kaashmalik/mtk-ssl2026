@@ -3,8 +3,8 @@
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
 import { db } from "@mtk/database"
-import { tenants, tenantBranding } from "@mtk/database"
-import { eq } from "drizzle-orm"
+import { tenants, tenantBranding, subscriptions, users } from "@mtk/database"
+import { eq, sql } from "drizzle-orm"
 import { z } from "zod"
 import { withAuth } from "./action-guard"
 
@@ -41,6 +41,15 @@ export async function getMyTenant() {
   return tenant ?? null
 }
 
+/**
+ * Creates a new tenant (league) with free tier activation.
+ *
+ * Steps:
+ *   1. Insert tenant with plan = 'free', isActive = true.
+ *   2. Create an active subscription row for the free plan (amount = 0).
+ *   3. Link the Clerk user to the tenant via users.tenant_ids array.
+ *      This ensures the webhook-synced user record has the tenant reference.
+ */
 export async function createTenant(input: CreateTenantInput) {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
@@ -70,6 +79,11 @@ export async function createTenant(input: CreateTenantInput) {
     throw new Error("This league URL is already taken. Please choose another.")
   }
 
+  // 1. Create tenant — explicitly set plan = 'free'
+  const now = new Date()
+  const periodEnd = new Date(now)
+  periodEnd.setMonth(periodEnd.getMonth() + 1)
+
   const [tenant] = await db
     .insert(tenants)
     .values({
@@ -77,9 +91,43 @@ export async function createTenant(input: CreateTenantInput) {
       slug: parsed.slug,
       customDomain: null,
       ownerId: userId,
+      plan: "free",
       isActive: true,
     })
     .returning()
+
+  // 2. Create free subscription row
+  await db.insert(subscriptions).values({
+    tenantId: tenant.id,
+    plan: "free",
+    status: "active",
+    monthlyAmount: "0",
+    currency: "PKR",
+    currentPeriodStart: now,
+    currentPeriodEnd: periodEnd,
+  })
+
+  // 3. Link the user to this tenant via tenant_ids array
+  //    Find the user by clerkId (set by the Clerk webhook)
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.clerkId, userId))
+    .limit(1)
+
+  if (user) {
+    const currentTenantIds: string[] = Array.isArray(user.tenantIds) ? user.tenantIds : []
+    if (!currentTenantIds.includes(tenant.id)) {
+      await db
+        .update(users)
+        .set({
+          tenantIds: [...currentTenantIds, tenant.id],
+          role: "league_owner",
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id))
+    }
+  }
 
   revalidatePath("/dashboard")
   revalidatePath("/dashboard/league")

@@ -10,6 +10,9 @@ export * from "./tenant-context";
 // Tenant-scoped repositories
 export * from "./repositories/index";
 
+// Plan limits & pricing constants
+export * from "./lib/plan-limits";
+
 // Schema exports
 export * from "./schema/tenants";
 export * from "./schema/tenant-branding";
@@ -25,6 +28,7 @@ export * from "./schema/match-balls";
 export * from "./schema/documents";
 export * from "./schema/media";
 export * from "./schema/subscriptions";
+export * from "./schema/subscription-requests";
 export * from "./schema/announcements";
 export * from "./schema/audit-logs";
 export * from "./schema/commentary-events";

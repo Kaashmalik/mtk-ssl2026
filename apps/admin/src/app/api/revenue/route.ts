@@ -2,7 +2,19 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import { verifySuperAdmin } from "@/lib/admin-auth";
-import { db, tenants } from "@mtk/database";
+import { db, tenants, payments, subscriptions } from "@mtk/database";
+import { eq, sql, and, gte, desc } from "drizzle-orm";
+
+/**
+ * Standardized plan prices (PKR per league) — must match tenant_plan enum
+ * and the marketing pricing component.
+ */
+const PLAN_PRICES: Record<string, number> = {
+  free: 0,
+  starter: 4999,
+  pro: 14999,
+  enterprise: 49999,
+};
 
 export async function GET() {
   const adminId = await verifySuperAdmin();
@@ -22,16 +34,48 @@ export async function GET() {
       .from(tenants);
 
     const activeTenants = tenantsList.filter((t) => t.isActive);
-    const planPrices: Record<string, number> = { starter: 4999, pro: 14999, enterprise: 49999, free: 0 };
 
-    const mrr = activeTenants.reduce((sum, t) => sum + (planPrices[t.plan] || 0), 0);
+    // Calculate MRR based on actual plan prices
+    const mrr = activeTenants.reduce(
+      (sum, t) => sum + (PLAN_PRICES[t.plan] || 0),
+      0
+    );
     const arr = mrr * 12;
 
-    const revenueByPlan = activeTenants.reduce((acc: Record<string, number>, t) => {
-      const plan = t.plan || "free";
-      acc[plan] = (acc[plan] || 0) + (planPrices[plan] || 0);
-      return acc;
-    }, {} as Record<string, number>);
+    // Revenue by plan breakdown
+    const revenueByPlan = activeTenants.reduce(
+      (acc: Record<string, number>, t) => {
+        const plan = t.plan || "free";
+        acc[plan] = (acc[plan] || 0) + (PLAN_PRICES[plan] || 0);
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+
+    // Fetch recent completed payments (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const recentPayments = await db
+      .select({
+        id: payments.id,
+        tenantId: payments.tenantId,
+        amount: payments.amount,
+        paymentMethod: payments.paymentMethod,
+        status: payments.status,
+        paymentType: payments.paymentType,
+        completedAt: payments.completedAt,
+        createdAt: payments.createdAt,
+      })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.status, "completed"),
+          gte(payments.completedAt, thirtyDaysAgo)
+        )
+      )
+      .orderBy(desc(payments.completedAt))
+      .limit(20);
 
     return NextResponse.json({
       mrr,
@@ -41,7 +85,7 @@ export async function GET() {
       activeSubscriptions: activeTenants.length,
       totalTenants: tenantsList.length,
       revenueByPlan,
-      recentPayments: [],
+      recentPayments,
     });
   } catch (error) {
     console.error("Revenue API error:", error);
@@ -51,5 +95,3 @@ export async function GET() {
     );
   }
 }
-
-
