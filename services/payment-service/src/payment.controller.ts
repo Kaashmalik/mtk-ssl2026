@@ -1,5 +1,6 @@
-import { Controller } from '@nestjs/common';
+import { Controller, Post, Req, Res, Headers, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
+import { Request, Response } from 'express';
 import { PaymentService } from './payment.service';
 
 interface CreatePaymentDto {
@@ -54,5 +55,29 @@ export class PaymentController {
   async listPayments(data: { tenantId: string; userId?: string; status?: string }): Promise<{ payments: Payment[] }> {
     const payments = await this.paymentService.listPayments(data.tenantId, data.userId, data.status);
     return { payments };
+  }
+
+  @Post('webhook')
+  @HttpCode(HttpStatus.OK)
+  async handleWebhook(
+    @Req() req: Request,
+    @Headers('stripe-signature') signature: string,
+    @Res() res: Response
+  ) {
+    if (!signature) {
+      throw new BadRequestException('Missing stripe-signature header');
+    }
+
+    try {
+      const rawBody = (req as any).rawBody;
+      if (!rawBody) {
+        throw new BadRequestException('Raw request body is missing. Ensure NestJS is configured with rawBody: true');
+      }
+
+      await this.paymentService.handleStripeWebhook(rawBody, signature);
+      res.status(HttpStatus.OK).json({ received: true });
+    } catch (error) {
+      res.status(HttpStatus.BAD_REQUEST).send(`Webhook Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

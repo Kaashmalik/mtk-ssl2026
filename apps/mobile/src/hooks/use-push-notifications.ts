@@ -1,40 +1,72 @@
 import { useEffect, useRef } from "react";
-import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
-import { useTranslation } from "react-i18next";
+import { useRouter } from "expo-router";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+const isExpoGo = Constants.appOwnership === "expo";
+
+const getNotifications = () => {
+  return require("expo-notifications") as any;
+};
+
+const log = (...args: unknown[]) => {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
+
+const warn = (...args: unknown[]) => {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.warn(...args);
+  }
+};
 
 export function usePushNotifications() {
-  const { t } = useTranslation();
-  const notificationListener = useRef<Notifications.Subscription>();
-  const responseListener = useRef<Notifications.Subscription>();
+  const router = useRouter();
+  const notificationListener = useRef<any>(null);
+  const responseListener = useRef<any>(null);
 
   useEffect(() => {
-    registerForPushNotificationsAsync();
+    if (Platform.OS === "web") return;
+    if (isExpoGo) {
+      warn(
+        "Push notifications are not supported in Expo Go. Use a development build."
+      );
+      return;
+    }
+
+    const Notifications = getNotifications();
+
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+
+    registerForPushNotificationsAsync().catch((e) =>
+      warn("Push notification setup failed:", e)
+    );
 
     // Handle notifications received while app is foregrounded
     notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        console.log("Notification received:", notification);
+      Notifications.addNotificationReceivedListener((notification: any) => {
+        log("Notification received:", notification);
       });
 
     // Handle user tapping on notification
     responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log("Notification tapped:", response);
+      Notifications.addNotificationResponseReceivedListener((response: any) => {
+        log("Notification tapped:", response);
         // Handle deep linking here
         const data = response.notification.request.content.data;
         if (data?.matchId) {
           // Navigate to match screen
-          // router.push(`/match/${data.matchId}`);
+          router.push(`/match/${data.matchId}`);
         }
       });
 
@@ -50,6 +82,8 @@ export function usePushNotifications() {
 
   return {
     sendLocalNotification: async (title: string, body: string, data?: any) => {
+      if (isExpoGo) return;
+      const Notifications = getNotifications();
       await Notifications.scheduleNotificationAsync({
         content: {
           title,
@@ -65,9 +99,16 @@ export function usePushNotifications() {
 
 async function registerForPushNotificationsAsync() {
   if (!Device.isDevice) {
-    console.warn("Must use physical device for Push Notifications");
+    warn("Must use physical device for Push Notifications");
     return;
   }
+
+  if (isExpoGo) {
+    warn("Push notifications are not supported in Expo Go");
+    return;
+  }
+
+  const Notifications = getNotifications();
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
@@ -78,15 +119,19 @@ async function registerForPushNotificationsAsync() {
   }
 
   if (finalStatus !== "granted") {
-    console.warn("Failed to get push token for push notification!");
+    warn("Failed to get push token for push notification!");
     return;
   }
 
-  const token = await Notifications.getExpoPushTokenAsync({
-    projectId: process.env.EXPO_PUBLIC_PROJECT_ID,
-  });
+  const projectId = process.env.EXPO_PUBLIC_PROJECT_ID;
+  if (!projectId) {
+    warn("EXPO_PUBLIC_PROJECT_ID not set, skipping push token registration");
+    return;
+  }
 
-  console.log("Push token:", token.data);
+  const token = await Notifications.getExpoPushTokenAsync({ projectId });
+
+  log("Push token:", token.data);
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {

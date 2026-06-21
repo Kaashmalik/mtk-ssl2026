@@ -1,9 +1,10 @@
-import { pgTable, uuid, integer, timestamp, boolean, text, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, integer, timestamp, boolean, text, pgEnum, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { matches } from "./matches";
 import { matchInnings } from "./match-innings";
 import { players } from "./players";
+
 
 /**
  * Wicket type enum
@@ -45,6 +46,9 @@ export const matchBalls = pgTable("match_balls", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   uniqueBall: sql`UNIQUE (${table.matchId}, ${table.inningsId}, ${table.overNumber}, ${table.ballNumber})`,
+  bowlerIdIdx: index("idx_match_balls_bowler_id").on(table.bowlerId),
+  batsmanIdIdx: index("idx_match_balls_batsman_id").on(table.batsmanId),
+  matchOverIdx: index("idx_match_balls_match_over").on(table.matchId, table.overNumber),
 }));
 
 export type MatchBall = typeof matchBalls.$inferSelect;

@@ -202,22 +202,27 @@ export async function POST(request: NextRequest) {
 /**
  * Check DNS record (simplified - in production use dns.promises.resolveTxt or similar)
  */
+import dns from "dns";
+
+/**
+ * Check DNS record using Node dns promises
+ */
 async function checkDnsRecord(
-  _domain: string,
-  _type: string,
-  _expectedValue: string
+  domain: string,
+  type: string,
+  expectedValue: string
 ): Promise<boolean> {
-  // In production, use a proper DNS lookup library
-  // For now, return false to indicate verification is pending
-  // This should be implemented with actual DNS queries
   try {
-    // Example using Node.js dns module (would need to be in a server-side context)
-    // const dns = require('dns').promises;
-    // const records = await dns.resolveTxt(domain);
-    // return records.some(record => record.includes(expectedValue));
-    return false; // Placeholder
+    if (type.toLowerCase() === "txt") {
+      const records = await dns.promises.resolveTxt(domain);
+      return records.some((record) =>
+        record.some((val) => val === expectedValue || val.includes(expectedValue))
+      );
+    }
+    return false;
   } catch (error) {
-    console.error("DNS check error:", error);
+    // dns.resolveTxt throws on no records / domain not found
+    console.warn("DNS check failed or record not found for domain:", domain, error);
     return false;
   }
 }

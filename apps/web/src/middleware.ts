@@ -1,12 +1,24 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
+import {
+  resolveRequestId,
+  withRequestContext,
+  captureError,
+  getRequestLogger,
+} from "@mtk/observability";
 
-// Public routes that don't require authentication
+
+// Public routes that don't require authentication.
+// Cron routes are public — they authenticate via CRON_SECRET in the handler,
+// not via Clerk (Vercel Cron can't obtain a Clerk session).
 const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/ssl(.*)",
+  "/api/health",
+  "/api/cron/(.*)",
   "/matches/(.*)",
   "/tournaments/(.*)",
   "/teams/(.*)",
@@ -27,30 +39,95 @@ function getTenantFromHost(host: string): { subdomain: string | null } {
 }
 
 export default clerkMiddleware(async (auth, request) => {
-  const host = request.headers.get("host") || "";
-  const { subdomain } = getTenantFromHost(host);
-  
-  // Create response with tenant info in headers (actual tenant lookup happens in server components/API)
-  const response = NextResponse.next();
-  
-  if (subdomain) {
-    response.headers.set("x-tenant-slug", subdomain);
-  }
+  const requestId = resolveRequestId(request.headers);
+  const path = request.nextUrl?.pathname ?? request.url;
 
-  // Handle authentication for protected routes
-  if (!isPublicRoute(request)) {
-    // ClerkMiddlewareAuth doesn't expose userId directly in types
-    // We use sessionClaims?.sub as the user identifier
-    const authData = auth as unknown as { sessionClaims?: { sub?: string } };
-    const userId = authData.sessionClaims?.sub;
-    if (!userId) {
-      const signInUrl = new URL("/sign-in", request.url);
-      signInUrl.searchParams.set("redirect_url", request.url);
-      return NextResponse.redirect(signInUrl);
+  return withRequestContext(
+    { requestId, method: request.method, path, service: "web" },
+    async () => {
+      const log = getRequestLogger();
+
+      try {
+        const host = request.headers.get("host") || "";
+        const { subdomain } = getTenantFromHost(host);
+
+        // Rate limiting for mutation requests (POST, PUT, PATCH, DELETE)
+        const method = request.method;
+        if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+          const authData = auth as unknown as { sessionClaims?: { sub?: string } };
+          const userId = authData.sessionClaims?.sub;
+
+          // Fallback to IP address if no userId is present
+          const ip =
+            request.headers.get("x-forwarded-for") ||
+            request.headers.get("x-real-ip") ||
+            "127.0.0.1";
+          const key = userId ? `user:${userId}` : `ip:${ip}`;
+
+          // Limit to 60 requests per minute.
+          // `rateLimit` is async — it uses Redis when available (Node runtime)
+          // and falls back to in-memory on Edge runtime.
+          const { success, remaining, reset } = await rateLimit(key, 60, 60000);
+
+          if (!success) {
+            log.warn("Rate limit exceeded", { key, remaining, reset });
+            return new NextResponse(
+              JSON.stringify({ error: "Too many requests. Please try again later." }),
+              {
+                status: 429,
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-RateLimit-Limit": "60",
+                  "X-RateLimit-Remaining": remaining.toString(),
+                  "X-RateLimit-Reset": reset.toString(),
+                  "X-Request-Id": requestId,
+                },
+              }
+            );
+          }
+        }
+
+        // Create response with tenant info in headers (actual tenant lookup happens in server components/API)
+        const response = NextResponse.next();
+        response.headers.set("X-Request-Id", requestId);
+
+        if (subdomain) {
+          response.headers.set("x-tenant-slug", subdomain);
+        }
+
+        // Handle authentication for protected routes
+        if (!isPublicRoute(request)) {
+          // ClerkMiddlewareAuth doesn't expose userId directly in types
+          // We use sessionClaims?.sub as the user identifier
+          const authData = auth as unknown as { sessionClaims?: { sub?: string } };
+          const userId = authData.sessionClaims?.sub;
+          if (!userId) {
+            const signInUrl = new URL("/sign-in", request.url);
+            signInUrl.searchParams.set("redirect_url", request.url);
+            return NextResponse.redirect(signInUrl);
+          }
+        }
+
+        return response;
+      } catch (err) {
+        // Any uncaught error in the middleware (e.g., Redis throwing outside
+        // rate-limit's try/catch) must be reported and surfaced as a 500
+        // rather than crashing the request silently.
+        await captureError(err, {
+          level: "error",
+          context: { requestId, method: request.method, path },
+          tags: { source: "middleware" },
+        });
+        return new NextResponse(
+          JSON.stringify({ error: "Internal middleware error" }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+          }
+        );
+      }
     }
-  }
-  
-  return response;
+  );
 });
 
 export const config = {

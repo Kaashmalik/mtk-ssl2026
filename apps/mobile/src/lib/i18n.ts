@@ -127,11 +127,22 @@ const resources = {
   },
 };
 
+let defaultLang = "en";
+try {
+  const locales = Localization.getLocales();
+  if (locales && locales.length > 0) {
+    defaultLang = locales[0]?.languageCode || "en";
+  }
+} catch (error) {
+  // eslint-disable-next-line no-console
+  console.warn("Failed to get locales from expo-localization:", error);
+}
+
 i18n
   .use(initReactI18next)
   .init({
     resources,
-    lng: Localization.getLocales()[0]?.languageCode || "en",
+    lng: defaultLang,
     fallbackLng: "en",
     interpolation: {
       escapeValue: false,

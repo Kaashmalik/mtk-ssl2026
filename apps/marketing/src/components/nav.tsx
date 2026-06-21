@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@mtk/ui";
 import { Menu, X } from "lucide-react";
+import Link from "next/link";
 
 export function Nav() {
   const [scrolled, setScrolled] = useState(false);
@@ -34,9 +35,9 @@ export function Nav() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           <div className="flex items-center">
-            <a href="/" className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+            <Link href="/" className="text-2xl font-bold bg-linear-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
               SSL
-            </a>
+            </Link>
           </div>
 
           {/* Desktop Menu */}
@@ -54,7 +55,7 @@ export function Nav() {
               onClick={() => {
                 document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
               }}
-              className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
+              className="bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
             >
               Get Started
             </Button>
@@ -91,7 +92,7 @@ export function Nav() {
                 ))}
                 <div className="px-4">
                   <Button
-                    className="w-full bg-gradient-to-r from-emerald-600 to-green-600"
+                    className="w-full bg-linear-to-r from-emerald-600 to-green-600"
                     onClick={() => {
                       setMobileMenuOpen(false);
                       document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });

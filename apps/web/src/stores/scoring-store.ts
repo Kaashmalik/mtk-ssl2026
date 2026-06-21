@@ -179,13 +179,19 @@ export const useScoringStore = create<ScoringState>()(
         };
 
         // Update per-innings history with full state snapshots (O(1) undo/redo)
+        const MAX_HISTORY = 50;
         const currentHistory = state[historyKey];
-        const newHistory = currentHistory.history.slice(0, currentHistory.historyIndex + 1);
+        let newHistory = currentHistory.history.slice(0, currentHistory.historyIndex + 1);
         // Seed initial empty state if history is empty so undo can revert to start
         if (newHistory.length === 0) {
           newHistory.push(currentInnings);
         }
         newHistory.push(updatedInnings);
+
+        // Cap history to prevent memory leak
+        if (newHistory.length > MAX_HISTORY) {
+          newHistory = newHistory.slice(newHistory.length - MAX_HISTORY);
+        }
 
         // Save to offline storage if offline
         if (!state.isOnline) {

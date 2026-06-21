@@ -2,6 +2,8 @@
  * Expo app configuration for Shakir Super League
  */
 
+require("dotenv/config");
+
 module.exports = {
   name: "Shakir Super League",
   slug: "shakir-super-league",

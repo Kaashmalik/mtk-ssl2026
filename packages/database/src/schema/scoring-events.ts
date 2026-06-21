@@ -1,0 +1,38 @@
+import { pgTable, uuid, integer, timestamp, pgEnum, jsonb, bigint } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { tenants } from "./tenants";
+import { matches } from "./matches";
+
+/**
+ * Event type enum for scoring CQRS
+ */
+export const eventTypeEnum = pgEnum("event_type", [
+  "ball_recorded",
+  "ball_undone",
+  "innings_started",
+  "innings_completed",
+  "match_started",
+  "match_completed",
+  "player_substituted",
+  "penalty_awarded",
+]);
+
+/**
+ * Scoring events table — Immutable ball-by-ball event store log
+ */
+export const scoringEvents = pgTable("scoring_events", {
+  id: uuid("id").primaryKey().default(sql`uuid_generate_v7()`),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  matchId: uuid("match_id").notNull().references(() => matches.id, { onDelete: "cascade" }),
+  inningsId: uuid("innings_id"),
+  eventType: eventTypeEnum("event_type").notNull(),
+  eventVersion: integer("event_version").notNull().default(1),
+  aggregateId: uuid("aggregate_id").notNull(),
+  sequenceNumber: bigint("sequence_number", { mode: "number" }).notNull(),
+  payload: jsonb("payload").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ScoringEvent = typeof scoringEvents.$inferSelect;
+export type NewScoringEvent = typeof scoringEvents.$inferInsert;

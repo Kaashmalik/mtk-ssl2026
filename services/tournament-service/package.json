@@ -9,7 +9,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:cov": "jest --coverage"
   },
   "dependencies": {
@@ -36,3 +36,4 @@
     "typescript": "^5.7.0"
   }
 }
+

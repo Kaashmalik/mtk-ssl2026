@@ -167,4 +167,43 @@ export class PaymentService {
       .filter(p => !status || p.status === status)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
+
+  async handleStripeWebhook(rawBody: Buffer, signature: string): Promise<void> {
+    const event = this.stripeProvider.verifyWebhook(rawBody, signature);
+    
+    switch (event.type) {
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data.object as any;
+        const providerPaymentId = paymentIntent.id;
+        
+        const payment = Array.from(this.payments.values()).find(
+          p => p.providerPaymentId === providerPaymentId
+        );
+        
+        if (payment) {
+          payment.status = 'completed';
+          payment.updatedAt = new Date().toISOString();
+          this.payments.set(payment.id, payment);
+        }
+        break;
+      }
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data.object as any;
+        const providerPaymentId = paymentIntent.id;
+        
+        const payment = Array.from(this.payments.values()).find(
+          p => p.providerPaymentId === providerPaymentId
+        );
+        
+        if (payment) {
+          payment.status = 'failed';
+          payment.updatedAt = new Date().toISOString();
+          this.payments.set(payment.id, payment);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
 }

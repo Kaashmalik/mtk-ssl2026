@@ -2,9 +2,18 @@
 
 import { useEffect } from "react";
 
+interface WorkboxEvent {
+  type: string;
+}
+
+interface Workbox {
+  addEventListener: (event: string, handler: (event: WorkboxEvent) => void) => void;
+  register: () => void;
+}
+
 declare global {
   interface Window {
-    workbox: any;
+    workbox?: Workbox;
   }
 }
 
@@ -17,15 +26,15 @@ export function PWARegister() {
     ) {
       const wb = window.workbox;
       // Add event listeners to handle PWA lifecycle
-      wb.addEventListener("installed", (event: any) => {
+      wb.addEventListener("installed", (event: WorkboxEvent) => {
         console.log(`Event ${event.type} is triggered.`);
       });
 
-      wb.addEventListener("controlling", (event: any) => {
+      wb.addEventListener("controlling", (event: WorkboxEvent) => {
         console.log(`Event ${event.type} is triggered.`);
       });
 
-      wb.addEventListener("activated", (event: any) => {
+      wb.addEventListener("activated", (event: WorkboxEvent) => {
         console.log(`Event ${event.type} is triggered.`);
       });
 

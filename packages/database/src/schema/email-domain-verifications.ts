@@ -21,6 +21,7 @@ export const emailDomainVerifications = pgTable("email_domain_verifications", {
   domain: text("domain").notNull(),
   senderEmail: text("sender_email").notNull(), // e.g., no-reply@myleague.com
   dkimPublicKey: text("dkim_public_key"),
+  dkimPrivateKey: text("dkim_private_key"), // PEM-encoded RSA private key, used to sign outbound mail
   dkimSelector: text("dkim_selector").default("default"),
   spfRecord: text("spf_record"),
   dmarcRecord: text("dmarc_record"),

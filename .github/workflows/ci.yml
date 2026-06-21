@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master, dev ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Database Package Build
+        run: pnpm --filter @mtk/database build
+
+      - name: Run Lint
+        run: pnpm lint
+
+      - name: Run Type Check
+        run: pnpm type-check
+
+      - name: Run Unit Tests
+        run: pnpm --filter @mtk/web test
+
+      - name: Run API Unit Tests
+        run: pnpm --filter @mtk/api test
+
+      - name: Run API E2E Tests
+        run: pnpm --filter @mtk/api test:e2e

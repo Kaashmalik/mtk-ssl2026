@@ -56,7 +56,7 @@ Current implementation provides placeholders - implement proper key generation f
 
 1. **Local Testing:**
    - Use staging Let's Encrypt environment
-   - Test DNS verification with local DNS server
+   - Test DNS verification with lo cal DNS server
    - Mock email verification
 
 2. **Production Testing:**

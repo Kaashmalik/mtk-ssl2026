@@ -113,7 +113,7 @@ services:
       TOURNAMENT_SERVICE_HOST: tournament-service
       TOURNAMENT_SERVICE_PORT: 5002
       SCORING_SERVICE_HOST: scoring-service
-      SCORING_SERVICE_PORT: 4000
+      SCORING_SERVICE_PORT: 4002
       PAYMENT_SERVICE_HOST: payment-service
       PAYMENT_SERVICE_PORT: 5004
       NOTIFICATION_SERVICE_HOST: notification-service
@@ -150,11 +150,10 @@ services:
     container_name: ssl-prod-scoring-service
     restart: unless-stopped
     ports:
-      - "4000:4000"
-      - "4001:4001"
+      - "4002:4002"
     environment:
       NODE_ENV: production
-      PORT: 4000
+      PORT: 4002
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:29092
       DATABASE_URL: postgresql://${POSTGRES_USER:-ssl}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ssl_prod}
@@ -297,7 +296,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
-      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:4001}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:4002}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
     depends_on:
       - api-gateway

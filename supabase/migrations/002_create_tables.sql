@@ -139,18 +139,46 @@ CREATE INDEX idx_teams_captain_id ON teams(captain_id);
 -- ============================================================================
 -- PLAYERS
 -- ============================================================================
+CREATE TYPE public.player_role AS ENUM ('batsman', 'bowler', 'all_rounder', 'wicket_keeper', 'wicket_keeper_batsman');
+CREATE TYPE public.batting_style AS ENUM ('right', 'left');
+CREATE TYPE public.bowling_style AS ENUM (
+  'right_arm_fast', 'right_arm_medium', 'right_arm_spin', 
+  'left_arm_fast', 'left_arm_medium', 'left_arm_spin'
+);
+CREATE TYPE public.player_status AS ENUM ('active', 'injured', 'retired', 'suspended', 'inactive');
+
 CREATE TABLE players (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v7(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   team_id uuid REFERENCES teams(id) ON DELETE SET NULL,
-  user_id uuid REFERENCES users(id) ON DELETE SET NULL, -- Optional link to user account
+  user_id uuid REFERENCES users(id) ON DELETE SET NULL,
   profile_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  
+  -- Personal Information
+  name text NOT NULL,
+  photo_url text,
+  date_of_birth date,
+  phone text,
+  email text,
+  nationality text,
+  city text,
+  
+  -- Physical Stats
+  height_cm integer,
+  weight_kg integer,
+  
+  -- Cricket Details
   jersey_number integer,
-  role text CHECK (role IN ('batsman', 'bowler', 'all_rounder', 'wicket_keeper', 'wicket_keeper_batsman')),
-  batting_style text CHECK (batting_style IN ('right', 'left')),
-  bowling_style text CHECK (bowling_style IN ('right_arm_fast', 'right_arm_medium', 'right_arm_spin', 'left_arm_fast', 'left_arm_medium', 'left_arm_spin')),
+  role public.player_role,
+  batting_style public.batting_style,
+  bowling_style public.bowling_style,
+  biography text,
+  
+  -- Status
+  status public.player_status NOT NULL DEFAULT 'active',
   is_active boolean NOT NULL DEFAULT true,
   joined_at date,
+  created_by text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );

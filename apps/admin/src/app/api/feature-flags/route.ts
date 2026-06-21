@@ -1,28 +1,21 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { getSupabaseServer, isSuperAdmin } from "@/lib/supabase-server";
+import { verifySuperAdmin } from "@/lib/admin-auth";
+import { db, featureFlags } from "@mtk/database";
+import { desc, eq } from "drizzle-orm";
 
 export async function GET() {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("feature_flags")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
+    const data = await db
+      .select()
+      .from(featureFlags)
+      .orderBy(desc(featureFlags.createdAt));
 
     return NextResponse.json({ featureFlags: data || [] });
   } catch (error) {
@@ -35,19 +28,12 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const { flagId, isEnabled, rolloutPercentage, metadata } = await request.json();
 
     if (!flagId) {
@@ -57,21 +43,24 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServer();
-    const updateData: any = { updated_at: new Date().toISOString() };
+    const updateData: any = { updatedAt: new Date() };
     
-    if (typeof isEnabled === "boolean") updateData.is_enabled = isEnabled;
-    if (rolloutPercentage !== undefined) updateData.rollout_percentage = rolloutPercentage;
+    if (typeof isEnabled === "boolean") updateData.isEnabled = isEnabled;
+    if (rolloutPercentage !== undefined) updateData.rolloutPercentage = rolloutPercentage.toString();
     if (metadata !== undefined) updateData.metadata = metadata;
 
-    const { data, error } = await supabase
-      .from("feature_flags")
-      .update(updateData)
-      .eq("id", flagId)
-      .select()
-      .single();
+    const [data] = await db
+      .update(featureFlags)
+      .set(updateData)
+      .where(eq(featureFlags.id, flagId))
+      .returning();
 
-    if (error) throw error;
+    if (!data) {
+      return NextResponse.json(
+        { error: "Feature flag not found" },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({ featureFlag: data });
   } catch (error) {
@@ -84,19 +73,12 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const { key, name, description, isEnabled, rolloutPercentage, targetTenants, metadata } = await request.json();
 
     if (!key || !name) {
@@ -106,23 +88,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("feature_flags")
-      .insert({
+    const [data] = await db
+      .insert(featureFlags)
+      .values({
         key,
         name,
         description,
-        is_enabled: isEnabled || false,
-        rollout_percentage: rolloutPercentage || "0",
-        target_tenants: targetTenants || null,
+        isEnabled: isEnabled || false,
+        rolloutPercentage: rolloutPercentage ? rolloutPercentage.toString() : "0",
+        targetTenants: targetTenants || null,
         metadata: metadata || null,
-        created_by: userId,
+        createdBy: adminId,
       })
-      .select()
-      .single();
-
-    if (error) throw error;
+      .returning();
 
     return NextResponse.json({ featureFlag: data });
   } catch (error) {
@@ -133,4 +111,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 

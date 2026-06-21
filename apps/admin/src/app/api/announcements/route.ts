@@ -1,28 +1,21 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { getSupabaseServer, isSuperAdmin } from "@/lib/supabase-server";
+import { verifySuperAdmin } from "@/lib/admin-auth";
+import { db, announcements } from "@mtk/database";
+import { desc } from "drizzle-orm";
 
 export async function GET() {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("announcements")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
+    const data = await db
+      .select()
+      .from(announcements)
+      .orderBy(desc(announcements.createdAt));
 
     return NextResponse.json({ announcements: data || [] });
   } catch (error) {
@@ -35,19 +28,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const body = await request.json();
     const { title, message, type, priority, targetAudience, startDate, endDate, actionUrl, actionText } = body;
 
@@ -58,26 +44,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("announcements")
-      .insert({
+    const [data] = await db
+      .insert(announcements)
+      .values({
         title,
         message,
         type: type || "info",
         priority: priority || "medium",
-        target_audience: targetAudience || "all",
-        start_date: startDate || new Date().toISOString(),
-        end_date: endDate,
-        action_url: actionUrl,
-        action_text: actionText,
-        created_by: userId,
-        is_active: true,
+        targetAudience: targetAudience || "all",
+        startDate: startDate ? new Date(startDate) : new Date(),
+        endDate: endDate ? new Date(endDate) : null,
+        actionUrl: actionUrl || null,
+        actionText: actionText || null,
+        createdBy: adminId,
+        isActive: true,
       })
-      .select()
-      .single();
-
-    if (error) throw error;
+      .returning();
 
     return NextResponse.json({ announcement: data });
   } catch (error) {
@@ -88,4 +70,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 

@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { CommissionManagement } from "@/components/commission/commission-management";
+import { buildMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildMetadata({
+  title: "Commission Rates",
+  description: "Configure platform commission rates for each subscription plan. Default rate is 15% per plan.",
+  path: "/commission",
+});
 
 export default function CommissionPage() {
   return (

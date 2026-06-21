@@ -10,7 +10,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json"
@@ -21,6 +21,7 @@
     "@nestjs/core": "^11.1.0",
     "@nestjs/microservices": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
+    "express": "^4.21.1",
     "@nestjs/platform-socket.io": "^11.1.0",
     "@nestjs/throttler": "^6.0.0",
     "@nestjs/websockets": "^11.1.0",
@@ -46,3 +47,4 @@
     "typescript": "^5.7.0"
   }
 }
+

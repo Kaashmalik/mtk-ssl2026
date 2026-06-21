@@ -11,6 +11,6 @@ export const env = z
     TOURNAMENT_SERVICE_HOST: z.string().default("localhost"),
     TOURNAMENT_SERVICE_PORT: z.string().default("5002"),
     SCORING_SERVICE_HOST: z.string().default("localhost"),
-    SCORING_SERVICE_PORT: z.string().default("4000"),
+    SCORING_SERVICE_PORT: z.string().default("4002"),
   })
   .parse(process.env);

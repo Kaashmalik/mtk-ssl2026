@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { AnnouncementsManagement } from "@/components/announcements/announcements-management";
+import { buildMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildMetadata({
+  title: "Announcements",
+  description: "Broadcast platform-wide announcements to all SSL users or targeted audiences. Manage active and scheduled announcements.",
+  path: "/announcements",
+});
 
 export default function AnnouncementsPage() {
   return (

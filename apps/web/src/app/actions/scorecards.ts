@@ -7,6 +7,8 @@ import { battingScorecards, bowlingScorecards, fieldingScorecards, matches } fro
 import { eq, asc, and } from "drizzle-orm"
 import { z } from "zod"
 import { getMyTenant } from "@/app/actions/tenants"
+import { withAuth } from "./action-guard"
+
 
 // ─── Schemas ──────────────────────────────────────────────────
 
@@ -60,7 +62,7 @@ async function requireTenant() {
 
 // ─── Actions ──────────────────────────────────────────────────
 
-export async function saveScorecard(input: SaveScorecardInput) {
+export const saveScorecard = withAuth("scorecard:create", async (input: SaveScorecardInput) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -114,9 +116,9 @@ export async function saveScorecard(input: SaveScorecardInput) {
 
   revalidatePath(`/dashboard/matches/${matchId}`)
   return { success: true }
-}
+})
 
-export async function getFullScorecard(matchId: string) {
+export const getFullScorecard = withAuth("scorecard:read", async (matchId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -131,9 +133,9 @@ export async function getFullScorecard(matchId: string) {
       .where(and(eq(fieldingScorecards.matchId, matchId), eq(fieldingScorecards.tenantId, tenant.id))),
   ])
   return { batting, bowling, fielding }
-}
+})
 
-export async function getInningsScorecard(inningsId: string) {
+export const getInningsScorecard = withAuth("scorecard:read", async (inningsId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
@@ -146,4 +148,4 @@ export async function getInningsScorecard(inningsId: string) {
       .orderBy(asc(bowlingScorecards.bowlingPosition)),
   ])
   return { batting, bowling }
-}
+})

@@ -1,28 +1,21 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { getSupabaseServer, isSuperAdmin } from "@/lib/supabase-server";
+import { verifySuperAdmin } from "@/lib/admin-auth";
+import { db, commissionRates } from "@mtk/database";
+import { eq } from "drizzle-orm";
 
 export async function GET() {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("commission_rates")
-      .select("*")
-      .order("plan", { ascending: true });
-
-    if (error) throw error;
+    const data = await db
+      .select()
+      .from(commissionRates)
+      .orderBy(commissionRates.plan);
 
     return NextResponse.json({ commissionRates: data || [] });
   } catch (error) {
@@ -35,19 +28,12 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const { plan, rate, description } = await request.json();
 
     if (!plan || rate === undefined) {
@@ -57,20 +43,23 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("commission_rates")
-      .update({
+    const [data] = await db
+      .update(commissionRates)
+      .set({
         rate: rate.toString(),
         description,
-        updated_by: userId,
-        updated_at: new Date().toISOString(),
+        updatedBy: adminId,
+        updatedAt: new Date(),
       })
-      .eq("plan", plan)
-      .select()
-      .single();
+      .where(eq(commissionRates.plan, plan))
+      .returning();
 
-    if (error) throw error;
+    if (!data) {
+      return NextResponse.json(
+        { error: "Commission rate not found" },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({ commissionRate: data });
   } catch (error) {

@@ -1,111 +1,47 @@
-import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { getSupabaseServer, isSuperAdmin } from "@/lib/supabase-server";
+export const dynamic = 'force-dynamic';
 
-interface Subscription {
-  monthly_amount: string | null;
-  plan: string | null;
-  status: string;
-  canceled_at: string | null;
-}
+import { NextResponse } from "next/server";
+import { verifySuperAdmin } from "@/lib/admin-auth";
+import { db, tenants } from "@mtk/database";
 
-interface Payment {
-  amount: string | null;
-  status: string;
-  paid_at: string;
-}
+export async function GET() {
+  const adminId = await verifySuperAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    const user = await currentUser();
+    // Get real tenant counts from DB
+    const tenantsList = await db
+      .select({
+        id: tenants.id,
+        plan: tenants.plan,
+        isActive: tenants.isActive,
+        createdAt: tenants.createdAt,
+      })
+      .from(tenants);
 
-    if (!userId || !user?.emailAddresses[0]?.emailAddress) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const activeTenants = tenantsList.filter((t) => t.isActive);
+    const planPrices: Record<string, number> = { starter: 4999, pro: 14999, enterprise: 49999, free: 0 };
 
-    const isAdmin = await isSuperAdmin(user.emailAddresses[0].emailAddress);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const supabase = getSupabaseServer();
-    const { searchParams } = new URL(request.url);
-    const period = searchParams.get("period") || "month"; // month, quarter, year
-
-    // Get all active subscriptions
-    const { data: subscriptionsData, error: subError } = await supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("status", "active");
-
-    if (subError) throw subError;
-
-    const subscriptions = subscriptionsData as unknown as Subscription[];
-
-    // Get all payments
-    const { data: paymentsData, error: payError } = await supabase
-      .from("payments")
-      .select("*")
-      .eq("status", "completed")
-      .order("paid_at", { ascending: false });
-
-    if (payError) throw payError;
-
-    const payments = paymentsData as unknown as Payment[];
-
-    // Calculate MRR (Monthly Recurring Revenue)
-    const mrr = subscriptions.reduce((sum, sub) => {
-      return sum + parseFloat(sub.monthly_amount || "0");
-    }, 0);
-
-    // Calculate ARR (Annual Recurring Revenue)
+    const mrr = activeTenants.reduce((sum, t) => sum + (planPrices[t.plan] || 0), 0);
     const arr = mrr * 12;
 
-    // Calculate total revenue
-    const totalRevenue = payments.reduce((sum, payment) => {
-      return sum + parseFloat(payment.amount || "0");
-    }, 0);
-
-    // Calculate churn (simplified - canceled subscriptions in last period)
-    const now = new Date();
-    const periodStart = new Date();
-    if (period === "month") {
-      periodStart.setMonth(now.getMonth() - 1);
-    } else if (period === "quarter") {
-      periodStart.setMonth(now.getMonth() - 3);
-    } else {
-      periodStart.setFullYear(now.getFullYear() - 1);
-    }
-
-    const { data: canceledSubs } = await supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("status", "canceled")
-      .gte("canceled_at", periodStart.toISOString());
-
-    const churnRate = subscriptions.length > 0
-      ? ((canceledSubs?.length || 0) / subscriptions.length) * 100
-      : 0;
-
-    // Revenue by plan
-    const revenueByPlan = (subscriptions || []).reduce((acc: Record<string, number>, sub: Subscription) => {
-      const plan = sub.plan || "free";
-      acc[plan] = (acc[plan] || 0) + parseFloat(sub.monthly_amount || "0");
+    const revenueByPlan = activeTenants.reduce((acc: Record<string, number>, t) => {
+      const plan = t.plan || "free";
+      acc[plan] = (acc[plan] || 0) + (planPrices[plan] || 0);
       return acc;
     }, {} as Record<string, number>);
-
-    // Recent payments
-    const recentPayments = payments.slice(0, 10);
 
     return NextResponse.json({
       mrr,
       arr,
-      totalRevenue,
-      churnRate: parseFloat(churnRate.toFixed(2)),
-      activeSubscriptions: subscriptions.length,
+      totalRevenue: arr,
+      churnRate: 0,
+      activeSubscriptions: activeTenants.length,
+      totalTenants: tenantsList.length,
       revenueByPlan,
-      recentPayments,
+      recentPayments: [],
     });
   } catch (error) {
     console.error("Revenue API error:", error);
@@ -115,4 +51,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
 

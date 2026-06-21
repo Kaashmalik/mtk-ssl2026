@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { UsersManagement } from "@/components/users/users-management";
+import { buildMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildMetadata({
+  title: "Users Management",
+  description: "View all registered SSL users and initiate admin impersonation sessions for support and debugging purposes.",
+  path: "/users",
+});
 
 export default function UsersPage() {
   return (

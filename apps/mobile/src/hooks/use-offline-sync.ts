@@ -2,13 +2,27 @@ import { useEffect } from "react";
 import * as Network from "expo-network";
 import { useOfflineStore } from "@/store/offline-store";
 import { supabase } from "@/lib/supabase";
+import { Platform } from "react-native";
 
 export function useOfflineSync() {
   const { isOnline, setOnline, getPendingBalls, markBallSynced, clearSyncedBalls } =
     useOfflineStore();
 
+  const logSyncError = (error: unknown) => {
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to sync ball:", error);
+    }
+  };
+
   useEffect(() => {
     const checkNetwork = async () => {
+      if (Platform.OS === "web") {
+        if (typeof navigator !== "undefined") {
+          setOnline(navigator.onLine);
+        }
+        return;
+      }
       const networkState = await Network.getNetworkStateAsync();
       setOnline(networkState.isConnected ?? false);
     };
@@ -23,7 +37,7 @@ export function useOfflineSync() {
     if (!isOnline) return;
 
     const syncPendingBalls = async () => {
-      const pendingBalls = getPendingBalls("");
+      const pendingBalls = getPendingBalls();
       
       for (const ball of pendingBalls) {
         try {
@@ -44,7 +58,7 @@ export function useOfflineSync() {
             markBallSynced(ball.id);
           }
         } catch (error) {
-          console.error("Failed to sync ball:", error);
+          logSyncError(error);
         }
       }
 

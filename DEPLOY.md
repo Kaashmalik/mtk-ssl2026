@@ -47,10 +47,10 @@ Before you begin, ensure you have:
 
 - [ ] **Minimum 4GB RAM free** (check in Task Manager)
 
-- [ ] **Ports available:** 3000, 3001, 4000, 4001, 5432, 6379, 9092
+- [ ] **Ports available:** 3000, 3001, 3002, 4000, 4002, 5432, 6379, 9092
   ```powershell
   # Check if ports are in use
-  Get-NetTCPConnection -LocalPort 3000,3001,4000,5432,6379 -ErrorAction SilentlyContinue
+  Get-NetTCPConnection -LocalPort 3000,3001,3002,4000,4002,5432,6379 -ErrorAction SilentlyContinue
   ```
 
 ---
@@ -289,7 +289,7 @@ docker-compose -f docker-compose.prod.yml ps
 
 # Expected output - all should show "Up":
 # ssl-prod-api-gateway        Up 10 seconds   0.0.0.0:3000->3000
-# ssl-prod-scoring-service    Up 10 seconds   0.0.0.0:4000->4000, 0.0.0.0:4001->4001
+# ssl-prod-scoring-service    Up 10 seconds   0.0.0.0:4002->4002
 # ssl-prod-web                Up 10 seconds   0.0.0.0:3001->3000
 # etc.
 ```
@@ -311,7 +311,7 @@ curl http://localhost:3000/api/v1/health
 
 ```powershell
 # Test scoring service
-curl http://localhost:4000/health
+curl http://localhost:4002/health
 
 # Expected: {"status":"healthy","service":"scoring-service"}
 ```
@@ -329,7 +329,7 @@ curl -I http://localhost:3001
 
 ```powershell
 # Test WebSocket (install wscat if needed: npm install -g wscat)
-wscat -c ws://localhost:4001
+wscat -c ws://localhost:4002/scoring
 
 # Should connect successfully
 ```

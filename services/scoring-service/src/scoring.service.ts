@@ -6,7 +6,11 @@ import {
   matchInnings,
   matches,
   NewMatchBall,
+  scoringEvents,
+  scorecardProjections,
 } from '@mtk/database';
+import Redis from 'ioredis';
+import { env } from './env';
 
 export interface BallEvent {
   matchId: string;
@@ -54,8 +58,28 @@ export interface MatchState {
 @Injectable()
 export class ScoringService {
   private readonly logger = new Logger(ScoringService.name);
+  private readonly redis: Redis;
+
+  constructor() {
+    this.redis = new Redis({
+      host: env.REDIS_HOST,
+      port: env.REDIS_PORT,
+      maxRetriesPerRequest: null,
+    });
+  }
 
   async getMatchState(matchId: string): Promise<MatchState | null> {
+    const cacheKey = `match:state:${matchId}`;
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache hit for match state: ${matchId}`);
+        return JSON.parse(cached);
+      }
+    } catch (cacheErr) {
+      this.logger.warn(`Failed to read match state from Redis cache: ${cacheErr}`);
+    }
+
     try {
       const match = await db.query.matches.findFirst({
         where: eq(matches.id, matchId),
@@ -97,6 +121,12 @@ export class ScoringService {
         if (inn.status === 'in_progress') {
           state.currentInnings = inn.inningsNumber;
         }
+      }
+
+      try {
+        await this.redis.set(cacheKey, JSON.stringify(state), 'EX', 3600); // 1 hour TTL
+      } catch (cacheErr) {
+        this.logger.warn(`Failed to write match state to Redis cache: ${cacheErr}`);
       }
 
       return state;
@@ -160,6 +190,57 @@ export class ScoringService {
       const totalRuns = ballEvent.runs + (ballEvent.extras?.runs || 0);
       const isFour = totalRuns === 4 && !isWide && !isNoBall && !isBye && !isLegBye;
       const isSix = totalRuns === 6 && !isWide && !isNoBall && !isBye && !isLegBye;
+
+      // Initialize scorecard projection if missing
+      const projection = await tx.query.scorecardProjections.findFirst({
+        where: eq(scorecardProjections.inningsId, inningsId),
+      });
+
+      if (!projection) {
+        await tx.insert(scorecardProjections).values({
+          tenantId: match.tenantId,
+          matchId: matchId,
+          inningsId: inningsId,
+          inningsNumber: innings.inningsNumber,
+          teamId: innings.teamId,
+          totalRuns: 0,
+          totalWickets: 0,
+          totalBalls: 0,
+          totalExtras: 0,
+          wides: 0,
+          noBalls: 0,
+          byes: 0,
+          legByes: 0,
+          currentOver: 0,
+          currentBall: 0,
+          lastEventSequence: 0,
+        });
+      }
+
+      // Insert into scoringEvents (immutability event store)
+      const lastEvent = await tx.select({ seq: sql<number>`COALESCE(MAX(sequence_number), 0)` })
+        .from(scoringEvents)
+        .where(eq(scoringEvents.aggregateId, inningsId));
+      const nextSeq = (lastEvent[0]?.seq || 0) + 1;
+
+      await tx.insert(scoringEvents).values({
+        tenantId: match.tenantId,
+        matchId: matchId,
+        inningsId: inningsId,
+        eventType: 'ball_recorded',
+        eventVersion: 1,
+        aggregateId: inningsId,
+        sequenceNumber: nextSeq,
+        payload: {
+          runs: totalRuns,
+          is_wicket: isWicket,
+          is_wide: isWide,
+          is_no_ball: isNoBall,
+          is_bye: isBye,
+          is_leg_bye: isLegBye,
+          batsman_runs: ballEvent.runs,
+        },
+      });
 
       // 5. Insert the ball record
       const ballInsert: NewMatchBall = {
@@ -246,10 +327,18 @@ export class ScoringService {
         `| Score: ${scorecard.totalRuns}/${scorecard.totalWickets} (${scorecard.overs}.${scorecard.balls})`
       );
 
-      return {
+      const result = {
         ballId: insertedBall.id,
         scorecard,
       };
+
+      // Invalidate cache after database transaction commits
+      const cacheKey = `match:state:${matchId}`;
+      this.redis.del(cacheKey).catch((err) => 
+        this.logger.warn(`Failed to invalidate match state cache: ${err}`)
+      );
+
+      return result;
     });
   }
 
@@ -265,6 +354,22 @@ export class ScoringService {
 
       if (!ball) {
         throw new NotFoundException(`Ball ${ballId} not found in match ${matchId}`);
+      }
+
+      // Verify that this is the last recorded ball in this innings to prevent cascading database drift
+      const lastRecordedBall = await tx.query.matchBalls.findFirst({
+        where: eq(matchBalls.inningsId, ball.inningsId),
+        orderBy: [desc(matchBalls.createdAt)],
+      });
+
+      if (!lastRecordedBall || lastRecordedBall.id !== ballId) {
+        throw new BadRequestException('Only the last recorded ball can be undone');
+      }
+
+      // Verify that it is within a 5-minute safety time window
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (ball.createdAt < fiveMinutesAgo) {
+        throw new BadRequestException('Cannot undo a ball recorded more than 5 minutes ago');
       }
 
       // 2. Get the innings this ball belongs to
@@ -287,6 +392,31 @@ export class ScoringService {
       const isLegBye = ball.isLegBye;
       const isWicket = ball.isWicket;
       const totalRuns = ball.runs + (isWide || isNoBall ? 1 : 0); // Base runs + extra runs
+
+      // Insert undo event into scoringEvents
+      const lastEvent = await tx.select({ seq: sql<number>`COALESCE(MAX(sequence_number), 0)` })
+        .from(scoringEvents)
+        .where(eq(scoringEvents.aggregateId, ball.inningsId));
+      const nextSeq = (lastEvent[0]?.seq || 0) + 1;
+
+      await tx.insert(scoringEvents).values({
+        tenantId: innings.tenantId,
+        matchId: matchId,
+        inningsId: ball.inningsId,
+        eventType: 'ball_undone',
+        eventVersion: 1,
+        aggregateId: ball.inningsId,
+        sequenceNumber: nextSeq,
+        payload: {
+          runs: totalRuns,
+          is_wicket: isWicket,
+          is_wide: isWide,
+          is_no_ball: isNoBall,
+          is_bye: isBye,
+          is_leg_bye: isLegBye,
+          batsman_runs: ball.runs,
+        },
+      });
 
       // 4. Delete the ball record (cascade will handle related data)
       await tx.delete(matchBalls)
@@ -338,10 +468,18 @@ export class ScoringService {
         `| Score: ${scorecard.totalRuns}/${scorecard.totalWickets}`
       );
 
-      return {
+      const result = {
         ballId,
         scorecard,
       };
+
+      // Invalidate cache after database transaction commits
+      const cacheKey = `match:state:${matchId}`;
+      this.redis.del(cacheKey).catch((err) => 
+        this.logger.warn(`Failed to invalidate match state cache: ${err}`)
+      );
+
+      return result;
     });
   }
 

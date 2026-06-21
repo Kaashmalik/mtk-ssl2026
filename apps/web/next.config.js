@@ -5,8 +5,6 @@ z.object({
   NEXT_PUBLIC_WS_URL: z.string().url().default("http://localhost:4000"),
 }).parse(process.env);
 
-const { withSentryConfig } = require("@sentry/nextjs");
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -48,16 +46,27 @@ const nextConfig = {
   },
 };
 
-module.exports = withSentryConfig(nextConfig, {
-  org: process.env.SENTRY_ORG || "shakir-super-league",
-  project: process.env.SENTRY_PROJECT || "ssl-web",
-  silent: !process.env.CI,
-  widenClientFileUpload: true,
-  reactComponentAnnotation: {
-    enabled: true,
-  },
-  tunnelRoute: "/monitoring",
-  hideSourceMaps: true,
-  disableLogger: true,
-  automaticVercelMonitors: true,
-});
+// Only wrap with Sentry in production builds.
+// In dev mode, Sentry's withSentryConfig breaks Turbopack by injecting
+// client-side instrumentation when the SDK isn't available in the browser,
+// causing "(void 0) is not a function" runtime errors on every component.
+const isDev = process.env.NODE_ENV !== "production";
+
+if (isDev) {
+  module.exports = nextConfig;
+} else {
+  const { withSentryConfig } = require("@sentry/nextjs");
+  module.exports = withSentryConfig(nextConfig, {
+    org: process.env.SENTRY_ORG || "shakir-super-league",
+    project: process.env.SENTRY_PROJECT || "ssl-web",
+    silent: !process.env.CI,
+    widenClientFileUpload: true,
+    reactComponentAnnotation: {
+      enabled: true,
+    },
+    tunnelRoute: "/monitoring",
+    hideSourceMaps: true,
+    disableLogger: true,
+    automaticVercelMonitors: true,
+  });
+}

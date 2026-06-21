@@ -1,3 +1,22 @@
+/**
+ * @deprecated This hook calls the NestJS API service's /api/matches/*
+ * endpoints, which were served by the stub MatchesService (now deleted —
+ * see docs/architecture/BACKEND_UNIFICATION_DECISION.md). These endpoints
+ * returned hardcoded placeholder data and were never wired into a running
+ * service in production.
+ *
+ * MIGRATION: replace usages of these hooks with the real server actions in
+ * `apps/web/src/app/actions/matches.ts` (getMatches, getMatchById) and the
+ * scoring flow in `apps/web/src/app/actions/scorecards.ts`. Those actions
+ * talk directly to Postgres via Drizzle and return real data.
+ *
+ * This file is kept temporarily to avoid breaking imports in:
+ *   - app/dashboard/matches/live/[id]/page.tsx
+ *   - app/matches/[matchId]/scoring/page.tsx
+ *   - components/scoring/player-selector.tsx
+ *
+ * Once those call sites are migrated to server actions, delete this file.
+ */
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";

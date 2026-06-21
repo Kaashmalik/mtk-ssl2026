@@ -7,11 +7,25 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useState, useEffect } from "react"
 import {
   LayoutDashboard, Users, Trophy, CalendarDays, Sword, Settings,
-  ChevronLeft, ChevronRight, Radio, BarChart3, Gamepad2
+  ChevronLeft, ChevronRight, BarChart3, Gamepad2
 } from "lucide-react"
+import { useUser } from "@clerk/nextjs"
 import { Button } from "@mtk/ui/components/ui/button"
 
-const navGroups = [
+type NavItem = {
+  name: string
+  href: string
+  icon: typeof LayoutDashboard
+  shortcut?: string
+  badge?: "live"
+}
+
+type NavGroup = {
+  label: string
+  items: NavItem[]
+}
+
+const navGroups: NavGroup[] = [
   {
     label: "Management",
     items: [
@@ -40,6 +54,7 @@ const navGroups = [
 export function Sidebar() {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+  const { user, isLoaded } = useUser()
 
   // Keyboard shortcut to toggle sidebar
   useEffect(() => {
@@ -112,7 +127,7 @@ export function Sidebar() {
                       "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 relative group overflow-hidden",
                       "hover:bg-primary/5 hover:text-foreground",
                       isActive
-                        ? "text-primary font-medium shadow-sm bg-gradient-to-r from-primary/15 to-primary/5"
+                        ? "text-primary font-medium shadow-sm bg-linear-to-r from-primary/15 to-primary/5"
                         : "text-muted-foreground"
                     )}
                     title={collapsed ? item.name : undefined}
@@ -159,7 +174,7 @@ export function Sidebar() {
 
       {/* User section at bottom */}
       <AnimatePresence>
-        {!collapsed && (
+        {!collapsed && isLoaded && user && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -167,12 +182,20 @@ export function Sidebar() {
             className="border-t p-3"
           >
             <div className="flex items-center gap-3 px-2">
-              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-                MK
-              </div>
+              {user.imageUrl ? (
+                <img
+                  src={user.imageUrl}
+                  alt={user.fullName || "User Avatar"}
+                  className="h-8 w-8 rounded-full shrink-0 border border-primary/20"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+                  {user.firstName?.charAt(0) || ""}{user.lastName?.charAt(0) || ""}
+                </div>
+              )}
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">Muhammad Kashif</p>
-                <p className="text-xs text-muted-foreground truncate">Super Admin</p>
+                <p className="text-sm font-medium truncate">{user.fullName}</p>
+                <p className="text-xs text-muted-foreground truncate">{user.primaryEmailAddress?.emailAddress}</p>
               </div>
             </div>
           </motion.div>

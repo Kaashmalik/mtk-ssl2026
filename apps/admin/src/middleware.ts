@@ -1,17 +1,16 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-// All admin routes require authentication
-export default clerkMiddleware(async (auth, _req) => {
-  await (await auth()).protect();
+const isPublicRoute = createRouteMatcher(["/login(.*)", "/api/health"]);
 
-  // Additional check: verify super admin email
-  const { userId } = await auth();
-  if (userId) {
-    // This is a basic check - the actual email check happens in page components
-    // for server-side rendering, but we can add additional protection here if needed
+// Protect all routes except /login
+export default clerkMiddleware(async (auth, req) => {
+  if (!isPublicRoute(req)) {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
   }
-
   return NextResponse.next();
 });
 
@@ -21,4 +20,3 @@ export const config = {
     "/(api|trpc)(.*)",
   ],
 };
-

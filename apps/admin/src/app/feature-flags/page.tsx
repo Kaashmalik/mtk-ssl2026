@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { FeatureFlagsManagement } from "@/components/feature-flags/feature-flags-management";
+import { buildMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildMetadata({
+  title: "Feature Flags",
+  description: "Control feature availability and rollout percentages across the SSL platform. Enable or disable features per tenant or globally.",
+  path: "/feature-flags",
+});
 
 export default function FeatureFlagsPage() {
   return (

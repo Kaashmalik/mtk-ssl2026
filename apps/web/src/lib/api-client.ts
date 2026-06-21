@@ -1,10 +1,20 @@
 import { z } from "zod";
 
 export class APIError extends Error {
-  constructor(public status: number, message: string, public data?: any) {
+  constructor(public status: number, message: string, public data?: unknown) {
     super(message);
     this.name = "APIError";
   }
+}
+
+function getErrorMessage(data: unknown, fallback: string) {
+  if (data && typeof data === "object" && "message" in data) {
+    const message = (data as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim().length > 0) {
+      return message;
+    }
+  }
+  return fallback;
 }
 
 interface FetchOptions extends RequestInit {
@@ -35,7 +45,7 @@ export async function apiClient<T>(
   });
 
   if (!response.ok) {
-    let errorData;
+    let errorData: unknown;
     try {
       errorData = await response.json();
     } catch {
@@ -43,7 +53,7 @@ export async function apiClient<T>(
     }
     throw new APIError(
       response.status,
-      errorData.message || "An error occurred",
+      getErrorMessage(errorData, "An error occurred"),
       errorData
     );
   }

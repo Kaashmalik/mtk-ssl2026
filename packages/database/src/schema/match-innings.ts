@@ -1,4 +1,4 @@
-import { pgTable, uuid, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { matches } from "./matches";
@@ -31,6 +31,7 @@ export const matchInnings = pgTable("match_innings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   uniqueMatchInnings: sql`UNIQUE (${table.matchId}, ${table.inningsNumber})`,
+  matchIdIdx: index("idx_match_innings_match_id").on(table.matchId),
 }));
 
 export type MatchInnings = typeof matchInnings.$inferSelect;

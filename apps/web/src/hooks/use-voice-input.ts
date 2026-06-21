@@ -19,16 +19,25 @@ interface SpeechRecognitionEvent {
   };
 }
 
+interface SpeechRecognitionErrorEvent {
+  error: string;
+}
+
 interface SpeechRecognition {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
   onstart: () => void;
   onresult: (event: SpeechRecognitionEvent) => void;
-  onerror: (event: any) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
   onend: () => void;
   start: () => void;
   stop: () => void;
+}
+
+interface SpeechRecognitionWindow extends Window {
+  SpeechRecognition?: new () => SpeechRecognition;
+  webkitSpeechRecognition?: new () => SpeechRecognition;
 }
 
 const VOICE_COMMANDS: Record<string, BallInput> = {
@@ -68,8 +77,8 @@ export function useVoiceInput(onCommand: (input: BallInput) => void) {
     if (typeof window === "undefined") return;
 
     const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+      (window as SpeechRecognitionWindow).SpeechRecognition ||
+      (window as SpeechRecognitionWindow).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       setState((prev) => ({
@@ -104,7 +113,7 @@ export function useVoiceInput(onCommand: (input: BallInput) => void) {
       }
     };
 
-    recognition.onerror = (event: any) => {
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       setState((prev) => ({
         ...prev,
         error: `Speech recognition error: ${event.error}`,
@@ -129,7 +138,7 @@ export function useVoiceInput(onCommand: (input: BallInput) => void) {
     if (recognitionRef.current && !state.isListening) {
       try {
         recognitionRef.current.start();
-      } catch (error) {
+      } catch {
         setState((prev) => ({
           ...prev,
           error: "Failed to start voice recognition",

@@ -7,7 +7,6 @@ import { Search, Menu, Radio, Bell } from "lucide-react"
 import { Button } from "@mtk/ui/components/ui/button"
 import { ThemeToggle } from "@mtk/ui/components/theme-toggle"
 import { Sheet, SheetContent, SheetTrigger } from "@mtk/ui/components/ui/sheet"
-import { Badge } from "@mtk/ui/components/ui/badge"
 import { useState, useEffect, useCallback } from "react"
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty,

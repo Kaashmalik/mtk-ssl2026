@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { SystemHealthDashboard } from "@/components/system-health/system-health-dashboard";
+import { buildMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildMetadata({
+  title: "System Health",
+  description: "Monitor SSL platform uptime, database latency, API health, and error logs in real time.",
+  path: "/system-health",
+});
 
 export default function SystemHealthPage() {
   return (

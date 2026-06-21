@@ -24,9 +24,12 @@
     "build": "tsc",
     "lint": "eslint . --max-warnings 0",
     "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "studio": "drizzle-kit studio"
+    "studio": "drizzle-kit studio",
+    "db:types": "supabase gen types typescript --local > src/types.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
@@ -37,8 +40,13 @@
     "nanoid": "^5.1.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.0.0",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.20.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
   }
 }
 

@@ -1,13 +1,10 @@
 import { View, ActivityIndicator, StyleSheet, Text } from "react-native";
-import { useTranslation } from "react-i18next";
 
 interface LoadingSpinnerProps {
   message?: string;
 }
 
 export function LoadingSpinner({ message }: LoadingSpinnerProps) {
-  const { t } = useTranslation();
-
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color="#16a34a" />

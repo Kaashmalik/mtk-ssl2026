@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { WhiteLabelManagement } from "@/components/white-label/white-label-management";
+import { buildMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildMetadata({
+  title: "Branding Approvals",
+  description: "Review and approve white-label branding requests. Manage custom domains, logos, and tenant-level visual identity approvals.",
+  path: "/white-label",
+});
 
 export default function WhiteLabelPage() {
   return (
