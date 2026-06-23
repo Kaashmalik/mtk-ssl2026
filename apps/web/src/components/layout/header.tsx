@@ -7,30 +7,35 @@ import { Search, Menu, Radio, Bell } from "lucide-react"
 import { Button } from "@mtk/ui/components/ui/button"
 import { ThemeToggle } from "@mtk/ui/components/theme-toggle"
 import { Sheet, SheetContent, SheetTrigger } from "@mtk/ui/components/ui/sheet"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty,
   CommandGroup, CommandItem, CommandShortcut,
 } from "@mtk/ui/components/ui/command-palette"
 import {
-  LayoutDashboard, Users, Trophy, CalendarDays, Sword, Settings, BarChart3
+  LayoutDashboard, Users, Trophy, Sword, Settings, BarChart3,
+  Gamepad2, Shield, ClipboardList, UserCog
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { type UserRole, getNavigationForRole } from "@/lib/rbac"
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Teams", href: "/dashboard/teams", icon: Users },
-  { name: "Players", href: "/dashboard/players", icon: Sword },
-  { name: "Matches", href: "/dashboard/matches", icon: CalendarDays },
-  { name: "Tournaments", href: "/dashboard/tournaments", icon: Trophy },
-  { name: "Statistics", href: "/dashboard/stats", icon: BarChart3 },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-]
+const ICON_MAP: Record<string, typeof LayoutDashboard> = {
+  LayoutDashboard,
+  Trophy,
+  Shield,
+  Users,
+  Swords: Sword,
+  BarChart3,
+  ClipboardList,
+  UserCog,
+  Settings,
+}
 
-export function Header() {
+export function Header({ userRole }: { userRole?: UserRole }) {
   const pathname = usePathname()
   const router = useRouter()
   const [commandOpen, setCommandOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // ⌘K to open command palette
   useEffect(() => {
@@ -57,11 +62,33 @@ export function Header() {
     isLast: i === segments.length - 1,
   }))
 
+  // Resolve navigation items dynamically based on the role
+  const resolvedNavigation = useMemo(() => {
+    if (!userRole) {
+      return [{ name: "Dashboard", href: "/dashboard", icon: LayoutDashboard }]
+    }
+    const roleNav = getNavigationForRole(userRole)
+    const items = roleNav.map((item) => ({
+      name: item.label,
+      href: item.href,
+      icon: ICON_MAP[item.icon] || LayoutDashboard,
+    }))
+
+    // Add Scoring if user has analytics/matches access
+    const hasAnalytics = items.some((i) => i.href === "/dashboard/stats")
+    const hasMatches = items.some((i) => i.href === "/dashboard/matches")
+    if (hasAnalytics || hasMatches) {
+      items.push({ name: "Scoring", href: "/dashboard/scoring", icon: Gamepad2 })
+    }
+
+    return items
+  }, [userRole])
+
   return (
     <>
       <header className="flex h-14 items-center gap-4 border-b border-border/50 bg-background/60 backdrop-blur-xl px-4 lg:h-[60px] lg:px-6 sticky top-0 z-30 transition-all duration-300">
         {/* Mobile menu */}
-        <Sheet>
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="shrink-0 md:hidden">
               <Menu className="h-5 w-5" />
@@ -70,16 +97,21 @@ export function Header() {
           </SheetTrigger>
           <SheetContent side="left" className="flex flex-col w-72">
             <nav className="grid gap-1 text-sm font-medium mt-6">
-              <Link href="/" className="flex items-center gap-2 font-semibold mb-4 px-3">
+              <Link 
+                href="/" 
+                className="flex items-center gap-2 font-semibold mb-4 px-3"
+                onClick={() => setMobileMenuOpen(false)}
+              >
                 <Trophy className="h-6 w-6 text-primary" />
                 <span>Shakir Super League</span>
               </Link>
-              {navigation.map((item) => {
-                const isActive = pathname === item.href
+              {resolvedNavigation.map((item) => {
+                const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                   >
                     <item.icon className="h-4 w-4" />
@@ -147,7 +179,7 @@ export function Header() {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Navigation">
-            {navigation.map((item) => (
+            {resolvedNavigation.map((item) => (
               <CommandItem
                 key={item.href}
                 onSelect={() => runCommand(() => router.push(item.href))}
@@ -164,7 +196,7 @@ export function Header() {
               <CommandShortcut>⌘T</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push("/dashboard/matches/new"))}>
-              <CalendarDays className="mr-2 h-4 w-4" />
+              <Users className="mr-2 h-4 w-4" />
               <span>Schedule Match</span>
               <CommandShortcut>⌘M</CommandShortcut>
             </CommandItem>
@@ -174,3 +206,4 @@ export function Header() {
     </>
   )
 }
+

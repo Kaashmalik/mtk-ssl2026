@@ -77,7 +77,7 @@ export class AuthService {
       const tenantId = request.tenantId || 'tenant_default';
       const user: User = {
         id: 'user_123',
-        email: 'test@ssl.cricket',
+        email: 'test@ssl.mtkcodex.site',
         tenant_ids: [tenantId],
         roles: ['user'],
       };

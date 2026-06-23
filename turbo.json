@@ -10,7 +10,26 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "env": [
+        "NEXT_PUBLIC_*",
+        "SUPABASE_*",
+        "CLERK_*",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "SENTRY_*",
+        "ACME_*",
+        "CERT_STORAGE_DIR",
+        "DNS_PROVIDER",
+        "CLOUDFLARE_*",
+        "CRON_SECRET",
+        "API_SERVICE_URL",
+        "SSL_ADMIN_TOKEN",
+        "IMPERSONATION_TOKEN_SECRET",
+        "SERVICE_NAME",
+        "LOG_LEVEL",
+        "PORT"
+      ]
     },
     "lint": {
       "dependsOn": ["^lint"],

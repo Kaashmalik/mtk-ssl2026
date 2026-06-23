@@ -3,6 +3,21 @@
 import { io, Socket } from "socket.io-client";
 import type { BallData } from "@/stores/scoring-store";
 
+// ─── Shared Event Constants ──────────────────────────────────
+// These MUST match services/api/src/scoring/scoring.events.ts.
+// If you add/rename events, update BOTH files.
+export const ScoringEvents = {
+  JoinMatch: "join-match",
+  LeaveMatch: "leave-match",
+  BallAdded: "ball-added",
+  BallUndo: "ball-undo",
+  MatchState: "match-state",
+  MatchStateUpdated: "match-state-updated",
+  ScorerJoined: "scorer-joined",
+  ScorerLeft: "scorer-left",
+  BallRemoved: "ball-removed",
+} as const;
+
 let socket: Socket | null = null;
 const activeSubscriptions = new Set<string>();
 let connectListeners = 0;
@@ -74,24 +89,33 @@ function leaveMatchRoom(matchId: string): void {
   }
 }
 
-export interface BallRecordedEvent {
-  ballId: string;
+export interface BallAddedEvent {
   matchId: string;
-  inningsId: string;
-  over: number;
-  ball: number;
-  runs: number;
-  batsmanId: string;
-  bowlerId: string;
-  timestamp: string;
-  extras?: {
-    type: "wide" | "noball" | "bye" | "legbye";
+  ball: {
+    ballId: string;
+    inningsId: string;
+    over: number;
+    ball: number;
     runs: number;
+    batsmanId: string;
+    bowlerId: string;
+    timestamp: string;
+    extras?: {
+      type: "wide" | "noball" | "bye" | "legbye";
+      runs: number;
+    };
+    wicket?: {
+      type: string;
+      playerId: string;
+    };
   };
-  wicket?: {
-    type: string;
-    playerId: string;
-  };
+  scorerId: string;
+}
+
+export interface BallRemovedEvent {
+  matchId: string;
+  ballId: string;
+  scorerId: string;
 }
 
 export interface MatchStateEvent {
@@ -108,33 +132,58 @@ export interface MatchStateEvent {
 }
 
 export function subscribeToMatch(matchId: string, callbacks: {
-  onBallRecorded?: (data: BallRecordedEvent) => void;
+  onBallAdded?: (data: BallAddedEvent) => void;
+  onBallRemoved?: (data: BallRemovedEvent) => void;
   onMatchState?: (data: MatchStateEvent) => void;
+  onMatchStateUpdated?: (data: MatchStateEvent) => void;
 }): () => void {
   connectListeners++;
   const unsubscribe = joinMatchRoom(matchId);
   const s = ensureSocket();
 
-  if (callbacks.onBallRecorded) {
-    s.on("ball-recorded", callbacks.onBallRecorded);
+  if (callbacks.onBallAdded) {
+    s.on(ScoringEvents.BallAdded, callbacks.onBallAdded);
+  }
+  if (callbacks.onBallRemoved) {
+    s.on(ScoringEvents.BallRemoved, callbacks.onBallRemoved);
   }
   if (callbacks.onMatchState) {
-    s.on("match-state", callbacks.onMatchState);
+    s.on(ScoringEvents.MatchState, callbacks.onMatchState);
+  }
+  if (callbacks.onMatchStateUpdated) {
+    s.on(ScoringEvents.MatchStateUpdated, callbacks.onMatchStateUpdated);
   }
 
   return () => {
     connectListeners = Math.max(0, connectListeners - 1);
-    if (callbacks.onBallRecorded) {
-      s.off("ball-recorded", callbacks.onBallRecorded);
+    if (callbacks.onBallAdded) {
+      s.off(ScoringEvents.BallAdded, callbacks.onBallAdded);
+    }
+    if (callbacks.onBallRemoved) {
+      s.off(ScoringEvents.BallRemoved, callbacks.onBallRemoved);
     }
     if (callbacks.onMatchState) {
-      s.off("match-state", callbacks.onMatchState);
+      s.off(ScoringEvents.MatchState, callbacks.onMatchState);
+    }
+    if (callbacks.onMatchStateUpdated) {
+      s.off(ScoringEvents.MatchStateUpdated, callbacks.onMatchStateUpdated);
     }
     unsubscribe();
   };
 }
 
-export function emitBall(matchId: string, ballData: BallData): void {
+/**
+ * Emit a ball event to the scoring gateway.
+ * @param matchId - The match UUID
+ * @param inningsId - The active innings UUID (MUST be passed from scoring state)
+ * @param ballData - The ball data from the scoring store
+ */
+export function emitBall(matchId: string, inningsId: string, ballData: BallData): void {
+  if (!inningsId) {
+    console.error("[socket] emitBall called without inningsId — ball will be rejected by server");
+    return;
+  }
+
   joinMatchRoom(matchId);
   const s = ensureSocket();
 
@@ -155,34 +204,38 @@ export function emitBall(matchId: string, ballData: BallData): void {
       }
     : undefined;
 
-  s.emit("record-ball", {
+  // Emit "ball-added" — matches ScoringEvents.BallAdded on the server gateway
+  s.emit(ScoringEvents.BallAdded, {
     matchId,
-    inningsId: "",
-    over: ballData.overNumber,
-    ball: ballData.ballNumber,
-    runs: ballData.runs,
-    extras,
-    wicket,
-    batsmanId: ballData.batsmanId || "",
-    bowlerId: ballData.bowlerId || "",
-    timestamp: new Date(ballData.timestamp),
+    ballData: {
+      inningsId,
+      over: ballData.overNumber,
+      ball: ballData.ballNumber,
+      runs: ballData.runs,
+      extras,
+      wicket,
+      batsmanId: ballData.batsmanId || "",
+      bowlerId: ballData.bowlerId || "",
+      timestamp: new Date(ballData.timestamp),
+    },
   });
 }
 
 export function emitUndoBall(matchId: string, ballId: string): void {
   joinMatchRoom(matchId);
   const s = ensureSocket();
-  s.emit("undo-ball", { matchId, ballId });
+  // Emit "ball-undo" — matches ScoringEvents.BallUndo on the server gateway
+  s.emit(ScoringEvents.BallUndo, { matchId, ballId });
 }
 
-export function onBallAdded(handler: (data: BallRecordedEvent) => void): void {
+export function onBallAdded(handler: (data: BallAddedEvent) => void): void {
   const s = ensureSocket();
-  s.on("ball-recorded", handler);
+  s.on(ScoringEvents.BallAdded, handler);
 }
 
-export function offBallAdded(handler: (data: BallRecordedEvent) => void): void {
+export function offBallAdded(handler: (data: BallAddedEvent) => void): void {
   const s = ensureSocket();
-  s.off("ball-recorded", handler);
+  s.off(ScoringEvents.BallAdded, handler);
 }
 
 export function getSocketStatus(): { connected: boolean; subscriptions: string[] } {

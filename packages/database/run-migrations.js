@@ -2,25 +2,23 @@ const fs = require('fs');
 const path = require('path');
 const postgres = require('postgres');
 
-const connectionString = 'postgresql://postgres.anxstufkbqnjkxgksfkn:KaashMalik297$@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres';
+// Database connection string — MUST be provided via DATABASE_URL env var.
+// Falls back to local Supabase dev instance for convenience only.
+const connectionString = process.env.DATABASE_URL ||
+  'postgresql://postgres:postgres@localhost:54322/postgres';
 
 const migrationsDir = path.join(__dirname, '../../supabase/migrations');
 const filesToRun = [
-  '009_fantasy_cricket.sql',
-  '010_event_store_cqrs.sql',
-  '011_sync_drizzle_tables.sql',
-  '012_fix_indexes_and_fks.sql',
-  '013_fix_rls_gaps.sql',
-  '014_unify_rls_strategy.sql',
-  '015_create_commentary_events.sql',
-  '016_fix_trigger_undo_balls.sql',
-  '017_create_materialized_views_and_performance_indexes.sql'
+  '018_create_impersonation_sessions.sql',
+  '019_add_dkim_private_key.sql',
+  '020_restore_missing_tables.sql',
 ];
 
 async function run() {
   console.log('Connecting to Supabase to run migrations...');
+  console.log('  Host:', connectionString.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'));
   const sql = postgres(connectionString);
-  
+
   try {
     // Insert system default tenant to prevent FK violations in fantasy cricket migrations
     console.log('Ensuring system default tenant exists...');

@@ -98,7 +98,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- ─── 7. Seed commission rate for starter plan ───────────────────────────
-INSERT INTO commission_rates (plan, rate, description, is_active, created_at, updated_at)
-VALUES ('starter', 10.00, 'Standard commission for Starter plan', true, NOW(), NOW())
+-- ─── 7. Update commission_rates plan check constraint ───────────────────
+-- The original CHECK only allowed ('free', 'pro', 'enterprise'). Add 'starter'.
+ALTER TABLE commission_rates DROP CONSTRAINT IF EXISTS commission_rates_plan_check;
+ALTER TABLE commission_rates ADD CONSTRAINT commission_rates_plan_check
+  CHECK ((plan = ANY (ARRAY['free'::text, 'starter'::text, 'pro'::text, 'enterprise'::text])));
+
+-- ─── 8. Seed commission rate for starter plan ───────────────────────────
+INSERT INTO commission_rates (id, plan, rate, description, is_active, created_at, updated_at)
+VALUES (uuid_generate_v7(), 'starter', 10.00, 'Standard commission for Starter plan', true, NOW(), NOW())
 ON CONFLICT (plan) DO NOTHING;
+
+-- ─── 9. Grant permissions ─────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE ON public.subscription_requests TO service_role;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ssl') THEN
+    GRANT SELECT, INSERT, UPDATE ON public.subscription_requests TO ssl;
+  END IF;
+END $$;

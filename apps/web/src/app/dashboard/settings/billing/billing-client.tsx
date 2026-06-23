@@ -29,6 +29,7 @@ const PLANS = [
     whiteLabel: false,
     customDomain: false,
     liveStreaming: false,
+    popular: false,
   },
   {
     key: "starter",
@@ -95,6 +96,7 @@ const PLANS = [
     whiteLabel: true,
     customDomain: true,
     liveStreaming: true,
+    popular: false,
   },
 ] as const
 
@@ -110,6 +112,7 @@ interface SubscriptionRequest {
   createdAt: string
   expiresAt: string
   adminNotes: string | null
+  transactionReference: string
 }
 
 interface BillingPageClientProps {
@@ -117,7 +120,7 @@ interface BillingPageClientProps {
   clerkUserId: string
 }
 
-export function BillingPageClient({ tenant, clerkUserId }: BillingPageClientProps) {
+export function BillingPageClient({ tenant, clerkUserId: _clerkUserId }: BillingPageClientProps) {
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<PlanKey | null>(null)
   const [requests, setRequests] = useState<SubscriptionRequest[]>([])
@@ -469,7 +472,7 @@ export function BillingPageClient({ tenant, clerkUserId }: BillingPageClientProp
                 <CardContent className="flex-1">
                   <div className="mb-4">
                     <span className="text-3xl font-bold tracking-tight">{plan.displayPrice}</span>
-                    {plan.period !== "forever" && (
+                    {(plan.period as string) !== "forever" && (
                       <span className="text-sm text-muted-foreground ml-1">/{plan.period}</span>
                     )}
                   </div>

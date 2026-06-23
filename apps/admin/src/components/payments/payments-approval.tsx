@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
-import { Separator } from "@/components/ui/separator"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
+import { Button } from "@mtk/ui/components/ui/button"
+import { Badge } from "@mtk/ui/components/ui/badge"
+import { Textarea } from "@mtk/ui/components/ui/textarea"
+import { Separator } from "@mtk/ui/components/ui/separator"
 import {
   Check,
   X,
@@ -317,7 +317,7 @@ export function PaymentsApproval() {
                         <Textarea
                           placeholder="Add notes for the tenant..."
                           value={adminNotes}
-                          onChange={(e) => setAdminNotes(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAdminNotes(e.target.value)}
                           rows={3}
                         />
                       </div>

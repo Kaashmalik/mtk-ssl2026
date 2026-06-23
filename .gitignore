@@ -32,6 +32,10 @@ pnpm-debug.log*
 .env*
 !.env.example
 
+# MCP config (may contain tokens — keep local only)
+.mcp.json
+.mcp.local.json
+
 
 # Vercel
 .vercel

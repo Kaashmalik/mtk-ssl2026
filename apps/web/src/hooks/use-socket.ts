@@ -41,20 +41,23 @@ export function useSocket({ room, onMessage }: SocketOptions = {}): UseSocketRet
     setIsConnected(socket.connected);
 
     const messageHandler = (data: unknown) => onMessageRef.current?.("message", data);
-    const matchUpdateHandler = (data: unknown) => onMessageRef.current?.("match-update", data);
-    const ballRecordedHandler = (data: unknown) => onMessageRef.current?.("ball-recorded", data);
-    const scoreUpdateHandler = (data: unknown) => onMessageRef.current?.("score-update", data);
+    const ballAddedHandler = (data: unknown) => onMessageRef.current?.("ball-added", data);
+    const ballRemovedHandler = (data: unknown) => onMessageRef.current?.("ball-removed", data);
+    const matchStateHandler = (data: unknown) => onMessageRef.current?.("match-state", data);
+    const matchStateUpdatedHandler = (data: unknown) => onMessageRef.current?.("match-state-updated", data);
 
     socket.on("message", messageHandler);
-    socket.on("match-update", matchUpdateHandler);
-    socket.on("ball-recorded", ballRecordedHandler);
-    socket.on("score-update", scoreUpdateHandler);
+    socket.on("ball-added", ballAddedHandler);
+    socket.on("ball-removed", ballRemovedHandler);
+    socket.on("match-state", matchStateHandler);
+    socket.on("match-state-updated", matchStateUpdatedHandler);
 
     return () => {
       socket.off("message", messageHandler);
-      socket.off("match-update", matchUpdateHandler);
-      socket.off("ball-recorded", ballRecordedHandler);
-      socket.off("score-update", scoreUpdateHandler);
+      socket.off("ball-added", ballAddedHandler);
+      socket.off("ball-removed", ballRemovedHandler);
+      socket.off("match-state", matchStateHandler);
+      socket.off("match-state-updated", matchStateUpdatedHandler);
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
       disconnectSocket();

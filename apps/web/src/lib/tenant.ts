@@ -21,7 +21,7 @@ export async function getTenantFromRequest() {
     return customDomainTenant[0];
   }
 
-  // Check for subdomain (e.g., myleague.ssl.cricket)
+  // Check for subdomain (e.g., myleague.ssl.mtkcodex.site)
   const subdomain = host.split(".")[0];
   if (subdomain && subdomain !== "www" && subdomain !== "app" && subdomain !== "admin") {
     const subdomainTenant = await db

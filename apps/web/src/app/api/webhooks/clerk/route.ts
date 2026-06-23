@@ -19,7 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { db, users } from "@mtk/database";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 /**
  * Svix needs the raw body to verify the signature. The `NextRequest.text()`

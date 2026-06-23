@@ -26,8 +26,7 @@ const PLAN_PRICES: Record<string, number> = {
   enterprise: 49999,
 };
 
-const VALID_PLANS = ["starter", "pro", "enterprise"];
-const VALID_PAYMENT_METHODS = ["bank_transfer", "jazzcash_manual", "easypaisa_manual"];
+// Valid plans and payment methods are validated by createRequestSchema below.
 
 const createRequestSchema = z.object({
   requestedPlan: z.enum(["starter", "pro", "enterprise"]),
@@ -140,7 +139,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

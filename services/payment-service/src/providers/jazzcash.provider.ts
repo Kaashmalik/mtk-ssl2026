@@ -45,7 +45,7 @@ export class JazzCashProvider {
       pp_TxnExpiryDateTime: expiryDateTime,
       pp_BillReference: txnRefNo,
       pp_Description: dto.description || 'SSL Tournament Payment',
-      pp_ReturnURL: dto.returnUrl || this.configService.get('JAZZCASH_RETURN_URL', 'https://ssl.cricket/payment/callback'),
+      pp_ReturnURL: dto.returnUrl || this.configService.get('JAZZCASH_RETURN_URL', 'https://ssl.mtkcodex.site/payment/callback'),
     };
 
     const secureHash = this.generateSecureHash(payload);

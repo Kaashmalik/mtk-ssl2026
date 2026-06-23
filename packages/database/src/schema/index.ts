@@ -4,6 +4,7 @@
 export * from "./tenants";
 export * from "./tenant-branding";
 export * from "./users";
+export * from "./user-tenant-roles";
 export * from "./profiles";
 
 // Cricket entities

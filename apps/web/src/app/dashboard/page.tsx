@@ -53,20 +53,45 @@ async function getDashboardStats(tenantId: string) {
   }
 }
 
-async function getTeamName(teamId: string): Promise<string> {
+/**
+ * Batch-fetch team names by IDs in a single query (eliminates N+1 problem).
+ */
+async function getTeamNameMap(teamIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  const uniqueIds = [...new Set(teamIds.filter(Boolean))]
+  if (uniqueIds.length === 0) return map
+
   try {
-    const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1)
-    return team?.name ?? "TBD"
-  } catch {
-    return "TBD"
+    const { inArray } = await import("drizzle-orm")
+    const rows = await db
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(inArray(teams.id, uniqueIds))
+    for (const row of rows) {
+      map.set(row.id, row.name)
+    }
+  } catch (error) {
+    console.error("Failed to batch-fetch team names:", error)
   }
+  return map
 }
 
-async function getInningsForMatch(matchId: string) {
+async function getInningsForMatches(matchIds: string[]) {
+  if (matchIds.length === 0) return new Map<string, typeof matchInnings.$inferSelect[]>()
   try {
-    return await db.select().from(matchInnings).where(eq(matchInnings.matchId, matchId)).orderBy(matchInnings.inningsNumber)
+    const { inArray } = await import("drizzle-orm")
+    const rows = await db.select().from(matchInnings)
+      .where(inArray(matchInnings.matchId, matchIds))
+      .orderBy(matchInnings.inningsNumber)
+    const map = new Map<string, typeof rows>()
+    for (const row of rows) {
+      const existing = map.get(row.matchId) || []
+      existing.push(row)
+      map.set(row.matchId, existing)
+    }
+    return map
   } catch {
-    return []
+    return new Map<string, typeof matchInnings.$inferSelect[]>()
   }
 }
 
@@ -76,31 +101,34 @@ async function getLiveMatches(tenantId: string) {
       .where(and(eq(matches.tenantId, tenantId), eq(matches.status, "live")))
       .limit(5)
 
-    return await Promise.all(
-      liveMatchesRaw.map(async (m) => {
-        const [teamAName, teamBName, innings] = await Promise.all([
-          getTeamName(m.teamAId),
-          getTeamName(m.teamBId),
-          getInningsForMatch(m.id),
-        ])
-        const inn1 = innings.find((i) => i.inningsNumber === 1)
-        const inn2 = innings.find((i) => i.inningsNumber === 2)
-        const formatScore = (inn: typeof inn1) =>
-          inn ? `${inn.totalRuns}/${inn.totalWickets}` : "—"
-        const formatOvers = (inn: typeof inn1) =>
-          inn ? `${Math.floor(inn.totalBalls / 6)}.${inn.totalBalls % 6}` : "0.0"
+    // Batch fetch all team names + innings in 2 queries instead of N+1
+    const allTeamIds = liveMatchesRaw.flatMap(m => [m.teamAId, m.teamBId])
+    const [teamNames, inningsMap] = await Promise.all([
+      getTeamNameMap(allTeamIds),
+      getInningsForMatches(liveMatchesRaw.map(m => m.id)),
+    ])
 
-        return {
-          id: m.id,
-          team1: teamAName,
-          team2: teamBName,
-          score1: formatScore(inn1),
-          score2: formatScore(inn2),
-          overs2: formatOvers(inn2),
-          target: inn1 ? inn1.totalRuns + 1 : 0,
-        }
-      })
-    )
+    return liveMatchesRaw.map((m) => {
+      const teamAName = teamNames.get(m.teamAId) ?? "TBD"
+      const teamBName = teamNames.get(m.teamBId) ?? "TBD"
+      const innings = inningsMap.get(m.id) || []
+      const inn1 = innings.find((i) => i.inningsNumber === 1)
+      const inn2 = innings.find((i) => i.inningsNumber === 2)
+      const formatScore = (inn: typeof inn1) =>
+        inn ? `${inn.totalRuns}/${inn.totalWickets}` : "—"
+      const formatOvers = (inn: typeof inn1) =>
+        inn ? `${Math.floor(inn.totalBalls / 6)}.${inn.totalBalls % 6}` : "0.0"
+
+      return {
+        id: m.id,
+        team1: teamAName,
+        team2: teamBName,
+        score1: formatScore(inn1),
+        score2: formatScore(inn2),
+        overs2: formatOvers(inn2),
+        target: inn1 ? inn1.totalRuns + 1 : 0,
+      }
+    })
   } catch (error) {
     console.error("Failed to fetch live matches:", error)
     return []
@@ -114,23 +142,19 @@ async function getUpcomingMatches(tenantId: string) {
       .orderBy(matches.scheduledDate)
       .limit(5)
 
-    return await Promise.all(
-      upcomingRaw.map(async (m) => {
-        const [teamAName, teamBName] = await Promise.all([
-          getTeamName(m.teamAId),
-          getTeamName(m.teamBId),
-        ])
-        return {
-          id: m.id,
-          team1: teamAName,
-          team2: teamBName,
-          time: m.scheduledDate
-            ? new Intl.DateTimeFormat("en-PK", { dateStyle: "medium", timeStyle: "short" }).format(new Date(m.scheduledDate))
-            : "TBD",
-          venue: "", // venue name lookup could be added later
-        }
-      })
-    )
+    // Batch fetch team names in 1 query
+    const allTeamIds = upcomingRaw.flatMap(m => [m.teamAId, m.teamBId])
+    const teamNames = await getTeamNameMap(allTeamIds)
+
+    return upcomingRaw.map((m) => ({
+      id: m.id,
+      team1: teamNames.get(m.teamAId) ?? "TBD",
+      team2: teamNames.get(m.teamBId) ?? "TBD",
+      time: m.scheduledDate
+        ? new Intl.DateTimeFormat("en-PK", { dateStyle: "medium", timeStyle: "short" }).format(new Date(m.scheduledDate))
+        : "TBD",
+      venue: "", // venue name lookup could be added later
+    }))
   } catch (error) {
     console.error("Failed to fetch upcoming matches:", error)
     return []
@@ -144,15 +168,17 @@ async function getRecentActivity(tenantId: string) {
       .orderBy(desc(matches.updatedAt))
       .limit(5)
 
-    return await Promise.all(
-      recentMatches.map(async (m) => {
-        const teamAName = await getTeamName(m.teamAId)
-        const teamBName = await getTeamName(m.teamBId)
-        const message = m.result ?? `${teamAName} vs ${teamBName} completed`
-        const timeAgo = getRelativeTime(m.updatedAt)
-        return { type: "match" as const, message, time: timeAgo }
-      })
-    )
+    // Batch fetch team names in 1 query
+    const allTeamIds = recentMatches.flatMap(m => [m.teamAId, m.teamBId])
+    const teamNames = await getTeamNameMap(allTeamIds)
+
+    return recentMatches.map((m) => {
+      const teamAName = teamNames.get(m.teamAId) ?? "TBD"
+      const teamBName = teamNames.get(m.teamBId) ?? "TBD"
+      const message = m.result ?? `${teamAName} vs ${teamBName} completed`
+      const timeAgo = getRelativeTime(m.updatedAt)
+      return { type: "match" as const, message, time: timeAgo }
+    })
   } catch (error) {
     console.error("Failed to fetch recent activity:", error)
     return []

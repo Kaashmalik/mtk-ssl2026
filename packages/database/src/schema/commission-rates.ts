@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
  */
 export const commissionRates = pgTable("commission_rates", {
   id: uuid("id").primaryKey().default(sql`uuid_generate_v7()`),
-  plan: text("plan").notNull().unique(), // 'free', 'pro', 'enterprise'
+  plan: text("plan").notNull().unique(), // 'free', 'starter', 'pro', 'enterprise'
   rate: decimal("rate", { precision: 5, scale: 2 }).notNull(), // Percentage (e.g., 15.00 for 15%)
   description: text("description"),
   isActive: boolean("is_active").default(true).notNull(),

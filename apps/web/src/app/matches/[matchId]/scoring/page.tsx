@@ -123,7 +123,23 @@ function ScoringInterface() {
       const lastBall = currentInningsState.balls[currentInningsState.balls.length - 1];
       if (lastBall) {
         const { emitBall } = await import("@/lib/socket-client");
-        emitBall(matchId, lastBall);
+        emitBall(matchId, currentInningsState.inningsId, lastBall);
+      }
+    }
+  };
+
+  const handleUndo = async () => {
+    const state = useScoringStore.getState();
+    const currentInningsState = state.currentInnings === 1 ? state.innings1 :
+      state.currentInnings === 2 ? state.innings2 :
+      state.superOver;
+
+    if (currentInningsState && currentInningsState.balls.length > 0) {
+      const lastBall = currentInningsState.balls[currentInningsState.balls.length - 1];
+      undo();
+      if (isOnline) {
+        const { emitUndoBall } = await import("@/lib/socket-client");
+        emitUndoBall(matchId, lastBall.id);
       }
     }
   };
@@ -173,7 +189,7 @@ function ScoringInterface() {
 
         <div className="flex flex-wrap gap-2">
           <Button
-            onClick={undo}
+            onClick={handleUndo}
             variant="outline"
             size="sm"
             className="touch-manipulation"

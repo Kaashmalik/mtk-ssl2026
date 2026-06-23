@@ -4,9 +4,8 @@ const defaultCorsOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:3002",
-  "https://ssl.cricket",
-  "https://app.ssl.cricket",
-  "https://admin.ssl.cricket",
+  "https://ssl.mtkcodex.site",
+  "https://admin.ssl.mtkcodex.site",
 ];
 
 export const env = z

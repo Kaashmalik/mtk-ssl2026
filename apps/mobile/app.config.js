@@ -42,7 +42,7 @@ module.exports = {
         data: [
           {
             scheme: "https",
-            host: "ssl.cricket",
+            host: "ssl.mtkcodex.site",
             pathPrefix: "/match",
           },
           {
@@ -79,12 +79,12 @@ module.exports = {
     ],
   ],
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:4000",
+    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://api.ssl.mtkcodex.site",
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || "",
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
   },
   updates: {
-    url: "https://u.expo.dev/your-project-id",
+    url: process.env.EXPO_PUBLIC_UPDATE_URL || "https://u.expo.dev/your-project-id",
   },
   runtimeVersion: {
     policy: "appVersion",

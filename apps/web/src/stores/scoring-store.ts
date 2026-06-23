@@ -280,11 +280,17 @@ export const useScoringStore = create<ScoringState>()(
             return;
           }
 
+          // Resolve active inningsId from current state
+          const inningsKey = getInningsKey(state.currentInnings) as
+            "innings1" | "innings2" | "superOver";
+          const activeInnings = state[inningsKey];
+          const activeInningsId = activeInnings?.inningsId || "";
+
           const failed: BallData[] = [];
 
           for (const ball of pending) {
             try {
-              emitBall(state.matchId, ball);
+              emitBall(state.matchId, activeInningsId, ball);
               await markBallSynced(ball.id);
             } catch (error) {
               console.error("Failed to sync ball:", error);

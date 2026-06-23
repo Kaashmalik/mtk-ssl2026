@@ -2,7 +2,7 @@ import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 
 /**
- * Handle deep links from ssl.cricket/match/abc format
+ * Handle deep links from ssl.mtkcodex.site/match/abc format
  */
 export function useDeepLinking() {
   const router = useRouter();
@@ -10,7 +10,7 @@ export function useDeepLinking() {
   const handleDeepLink = (url: string) => {
     const { path } = Linking.parse(url);
 
-    // Handle ssl.cricket/match/abc or ssl://match/abc
+    // Handle ssl.mtkcodex.site/match/abc or ssl://match/abc
     if (path?.includes("/match/") || path?.startsWith("match/")) {
       const matchId = path.split("/match/")[1] || path.split("match/")[1];
       if (matchId) {
@@ -18,7 +18,7 @@ export function useDeepLinking() {
       }
     }
 
-    // Handle ssl.cricket/player/abc
+    // Handle ssl.mtkcodex.site/player/abc
     if (path?.includes("/player/") || path?.startsWith("player/")) {
       const playerId = path.split("/player/")[1] || path.split("player/")[1];
       if (playerId) {

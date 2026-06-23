@@ -14,7 +14,7 @@ function allowSubdomain(origin: string) {
   try {
     const { hostname, protocol } = new URL(origin);
     if (protocol !== "https:" && protocol !== "http:") return false;
-    return hostname.endsWith(".ssl.cricket");
+    return hostname.endsWith(".ssl.mtkcodex.site");
   } catch {
     return false;
   }
