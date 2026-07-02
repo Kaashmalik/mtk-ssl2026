@@ -75,13 +75,14 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "settings:manage",
   ],
   league_owner: [
+    // League owners manage their own league — NOT platform-wide user management
     "tournament:create", "tournament:read", "tournament:update", "tournament:delete", "tournament:manage_registrations",
     "team:create", "team:read", "team:update", "team:delete", "team:manage_roster",
     "player:create", "player:read", "player:update", "player:delete",
     "match:create", "match:read", "match:update", "match:delete", "match:score",
     "scorecard:create", "scorecard:read", "scorecard:update",
     "stats:read", "stats:manage",
-    "user:manage", "user:read",
+    "user:read",
     "fan:follow", "fan:read",
     "registration:create", "registration:manage",
     "settings:manage",

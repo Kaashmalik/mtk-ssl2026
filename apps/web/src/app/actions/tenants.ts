@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
 import { db } from "@mtk/database"
 import { tenants, tenantBranding, subscriptions, users } from "@mtk/database"
-import { eq, sql } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { withAuth } from "./action-guard"
 

@@ -1,5 +1,3 @@
-version: '3.8'
-
 # ============================================
 # SSL Production Deployment Configuration
 # ============================================
@@ -96,10 +94,47 @@ services:
   # ============================================
   # Microservices
   # ============================================
+  # Main REST API service (full CRUD, SSL automation, cron endpoints)
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: ssl-prod-api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://ssl.mtkcodex.site,https://admin.ssl.mtkcodex.site}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      # SSL / ACME automation
+      ACME_ENVIRONMENT: ${ACME_ENVIRONMENT:-production}
+      ACME_KEY_DIR: /app/certs/keys
+      CERT_STORAGE_DIR: /app/certs
+      DNS_PROVIDER: ${DNS_PROVIDER:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:-}
+      SSL_ADMIN_TOKEN: ${SSL_ADMIN_TOKEN:-${CRON_SECRET}}
+      CRON_SECRET: ${CRON_SECRET:-}
+      IMPERSONATION_TOKEN_SECRET: ${IMPERSONATION_TOKEN_SECRET:-}
+    volumes:
+      - ssl_certs:/app/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - ssl-prod-network
+
   api-gateway:
     build:
-      context: ./services/api-gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
     container_name: ssl-prod-api-gateway
     restart: unless-stopped
     ports:
@@ -127,8 +162,8 @@ services:
 
   auth-service:
     build:
-      context: ./services/auth-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/auth-service/Dockerfile
     container_name: ssl-prod-auth-service
     restart: unless-stopped
     environment:
@@ -145,8 +180,8 @@ services:
 
   scoring-service:
     build:
-      context: ./services/scoring-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/scoring-service/Dockerfile
     container_name: ssl-prod-scoring-service
     restart: unless-stopped
     ports:
@@ -167,8 +202,8 @@ services:
 
   tournament-service:
     build:
-      context: ./services/tournament-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/tournament-service/Dockerfile
     container_name: ssl-prod-tournament-service
     restart: unless-stopped
     environment:
@@ -184,8 +219,8 @@ services:
 
   payment-service:
     build:
-      context: ./services/payment-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/payment-service/Dockerfile
     container_name: ssl-prod-payment-service
     restart: unless-stopped
     environment:
@@ -202,8 +237,8 @@ services:
 
   notification-service:
     build:
-      context: ./services/notification-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/notification-service/Dockerfile
     container_name: ssl-prod-notification-service
     restart: unless-stopped
     environment:
@@ -223,8 +258,8 @@ services:
 
   ai-commentary-service:
     build:
-      context: ./services/ai-commentary-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/ai-commentary-service/Dockerfile
     container_name: ssl-prod-ai-commentary
     restart: unless-stopped
     environment:
@@ -241,8 +276,8 @@ services:
 
   analytics-service:
     build:
-      context: ./services/analytics-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/analytics-service/Dockerfile
     container_name: ssl-prod-analytics
     restart: unless-stopped
     environment:
@@ -260,8 +295,8 @@ services:
 
   streaming-service:
     build:
-      context: ./services/streaming-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/streaming-service/Dockerfile
     container_name: ssl-prod-streaming
     restart: unless-stopped
     ports:
@@ -284,10 +319,12 @@ services:
   # ============================================
   # Frontend
   # ============================================
+  # NOTE: Web, Admin, and Marketing apps are deployed to Vercel in production.
+  # This service is only used for full-stack local/Docker testing.
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
     container_name: ssl-prod-web
     restart: unless-stopped
     ports:
@@ -326,6 +363,7 @@ volumes:
   postgres_prod_data:
   redis_prod_data:
   clickhouse_prod_data:
+  ssl_certs:
 
 networks:
   ssl-prod-network:

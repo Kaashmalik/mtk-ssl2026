@@ -52,7 +52,7 @@ export function UpgradePlanModal({
   const [transactionReference, setTransactionReference] = useState("")
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null)
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null)
+
   const [error, setError] = useState<string | null>(null)
   const [showPaymentDetails, setShowPaymentDetails] = useState(true)
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -67,7 +67,7 @@ export function UpgradePlanModal({
       setTransactionReference("")
       setProofFile(null)
       setProofPreviewUrl(null)
-      setUploadedUrl(null)
+
       setError(null)
       setShowPaymentDetails(true)
     }
@@ -151,7 +151,7 @@ export function UpgradePlanModal({
       }
 
       const uploadData = await uploadRes.json()
-      setUploadedUrl(uploadData.url)
+
 
       const requestRes = await fetch("/api/subscriptions/request", {
         method: "POST",

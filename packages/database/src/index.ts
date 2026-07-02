@@ -17,6 +17,7 @@ export * from "./lib/plan-limits";
 export * from "./schema/tenants";
 export * from "./schema/tenant-branding";
 export * from "./schema/users";
+export * from "./schema/user-tenant-roles";
 export * from "./schema/profiles";
 export * from "./schema/tournaments";
 export * from "./schema/teams";

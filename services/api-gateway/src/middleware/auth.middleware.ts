@@ -91,7 +91,7 @@ export class AuthMiddleware implements NestMiddleware, OnModuleInit {
     const headerTenant = req.headers['x-tenant-id'] as string;
     if (headerTenant) return headerTenant;
 
-    // From subdomain (web clients): league.ssl.cricket
+    // From subdomain (web clients): league.ssl.mtkcodex.site
     const host = req.headers.host || '';
     const subdomain = host.split('.')[0];
     if (subdomain && subdomain !== 'api' && subdomain !== 'www') {

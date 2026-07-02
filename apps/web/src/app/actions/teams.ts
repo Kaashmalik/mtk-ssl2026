@@ -2,10 +2,10 @@
 
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
-import { db, PLAN_LIMITS } from "@mtk/database"
-import { type PlanKey } from "@mtk/database"
-import { teams, players, tournaments } from "@mtk/database"
-import { eq, and, ilike, desc, asc, count } from "drizzle-orm"
+import { teamRepo, playerRepo, tournamentRepo, withTenantContext, PLAN_LIMITS } from "@mtk/database"
+import { type PlanKey, type Team, type Player, type Tournament } from "@mtk/database"
+import { teams, players } from "@mtk/database"
+import { eq, and, ilike, desc, asc } from "drizzle-orm"
 import { z } from "zod"
 import { getMyTenant } from "@/app/actions/tenants"
 import { withAuth } from "./action-guard"
@@ -68,44 +68,38 @@ export const createTeam = withAuth("team:create", async (input: CreateTeamInput)
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-
-  // ─── Plan-based team quota check ────────────────────────────────
-  const planLimits = PLAN_LIMITS[tenant.plan as PlanKey] ?? PLAN_LIMITS.free
-  if (planLimits.maxTeams !== Infinity) {
-    const [{ teamCount }] = await db
-      .select({ teamCount: count() })
-      .from(teams)
-      .where(eq(teams.tenantId, tenant.id))
-
-    if (Number(teamCount) >= planLimits.maxTeams) {
-      throw new Error(
-        `Your ${tenant.plan} plan allows a maximum of ${planLimits.maxTeams} teams. ` +
-        `Upgrade your plan to create more teams.`
-      )
-    }
-  }
+  const tenantId = tenant.id
 
   const validated = createTeamSchema.parse({
     ...input,
     tenantId: input.tenantId ?? tenant.id,
   })
-  const tenantId = validated.tenantId ?? tenant.id
-  if (tenantId !== tenant.id) throw new Error("Invalid tenant")
   const slug = validated.slug || generateSlug(validated.name)
 
-  if (validated.tournamentId) {
-    const [tournament] = await db.select().from(tournaments)
-      .where(and(eq(tournaments.id, validated.tournamentId), eq(tournaments.tenantId, tenant.id)))
-      .limit(1)
-    if (!tournament) throw new Error("Tournament not found")
-  }
+  const team = await withTenantContext({ userId, tenantId }, async () => {
+    // Plan-based team quota check
+    const planLimits = PLAN_LIMITS[tenant.plan as PlanKey] ?? PLAN_LIMITS.free
+    if (planLimits.maxTeams !== Infinity) {
+      const teamCount = await teamRepo.count()
+      if (teamCount >= planLimits.maxTeams) {
+        throw new Error(
+          `Your ${tenant.plan} plan allows a maximum of ${planLimits.maxTeams} teams. ` +
+          `Upgrade your plan to create more teams.`
+        )
+      }
+    }
 
-  const [team] = await db.insert(teams).values({
-    ...validated,
-    tenantId,
-    slug,
-    createdBy: userId,
-  }).returning()
+    if (validated.tournamentId) {
+      const tournament = await tournamentRepo.findById<Tournament>(validated.tournamentId)
+      if (!tournament) throw new Error("Tournament not found")
+    }
+
+    return teamRepo.insertOne<Team>({
+      ...validated,
+      slug,
+      createdBy: userId,
+    })
+  })
 
   revalidatePath("/dashboard/teams")
   revalidatePath("/dashboard")
@@ -116,6 +110,7 @@ export const updateTeam = withAuth("team:update", async (id: string, input: Upda
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
+  const tenantId = tenant.id
 
   const validated = updateTeamSchema.parse(input)
   const cleanData = Object.fromEntries(
@@ -127,17 +122,17 @@ export const updateTeam = withAuth("team:update", async (id: string, input: Upda
     cleanData.slug = generateSlug(cleanData.name as string)
   }
 
-  if (cleanData.tournamentId) {
-    const [tournament] = await db.select().from(tournaments)
-      .where(and(eq(tournaments.id, cleanData.tournamentId as string), eq(tournaments.tenantId, tenant.id)))
-      .limit(1)
-    if (!tournament) throw new Error("Tournament not found")
-  }
+  const team = await withTenantContext({ userId, tenantId }, async () => {
+    if (cleanData.tournamentId) {
+      const tournament = await tournamentRepo.findById<Tournament>(cleanData.tournamentId as string)
+      if (!tournament) throw new Error("Tournament not found")
+    }
 
-  const [team] = await db.update(teams).set({
-    ...cleanData,
-    updatedAt: new Date(),
-  }).where(and(eq(teams.id, id), eq(teams.tenantId, tenant.id))).returning()
+    return teamRepo.updateById<Team>(id, {
+      ...cleanData,
+      updatedAt: new Date(),
+    })
+  })
 
   if (!team) throw new Error("Team not found")
 
@@ -150,8 +145,13 @@ export const deleteTeam = withAuth("team:delete", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
+  const tenantId = tenant.id
 
-  await db.delete(teams).where(and(eq(teams.id, id), eq(teams.tenantId, tenant.id)))
+  const deleted = await withTenantContext({ userId, tenantId }, () =>
+    teamRepo.deleteById(id)
+  )
+
+  if (!deleted) throw new Error("Team not found")
 
   revalidatePath("/dashboard/teams")
   revalidatePath("/dashboard")
@@ -162,79 +162,91 @@ export const getTeam = withAuth("team:read", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const [team] = await db.select().from(teams)
-    .where(and(eq(teams.id, id), eq(teams.tenantId, tenant.id)))
-    .limit(1)
-  return team ?? null
+  const tenantId = tenant.id
+
+  return withTenantContext({ userId, tenantId }, () =>
+    teamRepo.findById<Team>(id)
+  )
 })
 
 export const getTeamWithRoster = withAuth("team:read", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const [team] = await db.select().from(teams)
-    .where(and(eq(teams.id, id), eq(teams.tenantId, tenant.id)))
-    .limit(1)
-  if (!team) return null
+  const tenantId = tenant.id
 
-  const roster = await db.select().from(players)
-    .where(and(eq(players.teamId, id), eq(players.tenantId, tenant.id)))
-    .orderBy(asc(players.name))
+  return withTenantContext({ userId, tenantId }, async () => {
+    const team = await teamRepo.findById<Team>(id)
+    if (!team) return null
 
-  return { ...team, players: roster }
+    const roster = await playerRepo.findMany<Player>({
+      where: eq(players.teamId, id),
+      orderBy: asc(players.name),
+    })
+
+    return { ...team, players: roster }
+  })
 })
 
 export const getTeams = withAuth("team:read", async (filters: TeamFilters) => {
   const tenant = await requireTenant()
+  const { userId } = await auth()
+  if (!userId) throw new Error("Unauthorized")
+  const tenantId = tenant.id
+
   const validated = teamFiltersSchema.parse({ ...filters, tenantId: tenant.id })
   const { tournamentId, search, isActive, page, pageSize, sortBy, sortOrder } = validated
   const offset = (page - 1) * pageSize
 
-  const conditions = [eq(teams.tenantId, tenant.id)]
+  const conditions = []
   if (tournamentId) conditions.push(eq(teams.tournamentId, tournamentId))
   if (search) conditions.push(ilike(teams.name, `%${search}%`))
   if (isActive !== undefined) conditions.push(eq(teams.isActive, isActive))
 
-  const whereClause = and(...conditions)
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
   const orderFn = sortOrder === "desc" ? desc : asc
   const orderColumn = sortBy === "name" ? teams.name
     : sortBy === "city" ? teams.city
     : teams.createdAt
 
-  const [data, [{ total }]] = await Promise.all([
-    db.select().from(teams)
-      .where(whereClause)
-      .orderBy(orderFn(orderColumn))
-      .limit(pageSize)
-      .offset(offset),
-    db.select({ total: count() }).from(teams).where(whereClause),
-  ])
+  return withTenantContext({ userId, tenantId }, async () => {
+    const [data, total] = await Promise.all([
+      teamRepo.findMany<Team>({
+        where: whereClause,
+        orderBy: orderFn(orderColumn),
+        limit: pageSize,
+        offset,
+      }),
+      teamRepo.count({ where: whereClause }),
+    ])
 
-  return {
-    data,
-    pagination: {
-      page,
-      pageSize,
-      total: Number(total),
-      totalPages: Math.ceil(Number(total) / pageSize),
-    },
-  }
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    }
+  })
 })
 
 export const addPlayerToTeam = withAuth("team:manage_roster", async (teamId: string, playerId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
+  const tenantId = tenant.id
 
-  const [team] = await db.select().from(teams)
-    .where(and(eq(teams.id, teamId), eq(teams.tenantId, tenant.id)))
-    .limit(1)
-  if (!team) throw new Error("Team not found")
+  const player = await withTenantContext({ userId, tenantId }, async () => {
+    const team = await teamRepo.findById<Team>(teamId)
+    if (!team) throw new Error("Team not found")
 
-  const [player] = await db.update(players).set({
-    teamId,
-    updatedAt: new Date(),
-  }).where(and(eq(players.id, playerId), eq(players.tenantId, tenant.id))).returning()
+    return playerRepo.updateById<Player>(playerId, {
+      teamId,
+      updatedAt: new Date(),
+    })
+  })
 
   if (!player) throw new Error("Player not found")
 
@@ -247,20 +259,26 @@ export const removePlayerFromTeam = withAuth("team:manage_roster", async (teamId
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
+  const tenantId = tenant.id
 
-  const [team] = await db.select().from(teams)
-    .where(and(eq(teams.id, teamId), eq(teams.tenantId, tenant.id)))
-    .limit(1)
-  if (!team) throw new Error("Team not found")
+  await withTenantContext({ userId, tenantId }, async () => {
+    const team = await teamRepo.findById<Team>(teamId)
+    if (!team) throw new Error("Team not found")
 
-  const [player] = await db.update(players).set({
-    teamId: null,
-    updatedAt: new Date(),
-  }).where(and(eq(players.id, playerId), eq(players.teamId, teamId), eq(players.tenantId, tenant.id))).returning()
+    const pl = await playerRepo.findById<Player>(playerId)
+    if (!pl || pl.teamId !== teamId) {
+      throw new Error("Player not found in this team")
+    }
 
-  if (!player) throw new Error("Player not found in this team")
+    return playerRepo.updateById<Player>(playerId, {
+      teamId: null,
+      updatedAt: new Date(),
+    })
+  })
 
   revalidatePath(`/dashboard/teams/${teamId}`)
   revalidatePath(`/dashboard/players/${playerId}`)
   return { success: true }
 })
+
+

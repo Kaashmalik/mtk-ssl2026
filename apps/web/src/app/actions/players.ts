@@ -2,9 +2,9 @@
 
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
-import { db } from "@mtk/database"
-import { players, teams } from "@mtk/database"
-import { eq, and, ilike, desc, asc, count } from "drizzle-orm"
+import { playerRepo, teamRepo, withTenantContext } from "@mtk/database"
+import { players, type Player, type Team } from "@mtk/database"
+import { eq, and, ilike, desc, asc } from "drizzle-orm"
 import { z } from "zod"
 import { getMyTenant } from "@/app/actions/tenants"
 import { withAuth } from "./action-guard"
@@ -69,18 +69,17 @@ export const createPlayer = withAuth("player:create", async (input: CreatePlayer
   const tenantId = validated.tenantId ?? tenant.id
   if (tenantId !== tenant.id) throw new Error("Invalid tenant")
 
-  if (validated.teamId) {
-    const [team] = await db.select().from(teams)
-      .where(and(eq(teams.id, validated.teamId), eq(teams.tenantId, tenant.id)))
-      .limit(1)
-    if (!team) throw new Error("Team not found")
-  }
+  const player = await withTenantContext({ userId, tenantId }, async () => {
+    if (validated.teamId) {
+      const team = await teamRepo.findById<Team>(validated.teamId)
+      if (!team) throw new Error("Team not found")
+    }
 
-  const [player] = await db.insert(players).values({
-    ...validated,
-    tenantId,
-    createdBy: userId,
-  }).returning()
+    return playerRepo.insertOne<Player>({
+      ...validated,
+      createdBy: userId,
+    })
+  })
 
   revalidatePath("/dashboard/players")
   revalidatePath("/dashboard")
@@ -91,6 +90,7 @@ export const updatePlayer = withAuth("player:update", async (id: string, input: 
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
+  const tenantId = tenant.id
 
   const validated = updatePlayerSchema.parse(input)
 
@@ -99,17 +99,17 @@ export const updatePlayer = withAuth("player:update", async (id: string, input: 
     Object.entries(validated).filter(([, v]) => v !== undefined)
   )
 
-  if (cleanData.teamId) {
-    const [team] = await db.select().from(teams)
-      .where(and(eq(teams.id, cleanData.teamId as string), eq(teams.tenantId, tenant.id)))
-      .limit(1)
-    if (!team) throw new Error("Team not found")
-  }
+  const player = await withTenantContext({ userId, tenantId }, async () => {
+    if (cleanData.teamId) {
+      const team = await teamRepo.findById<Team>(cleanData.teamId as string)
+      if (!team) throw new Error("Team not found")
+    }
 
-  const [player] = await db.update(players).set({
-    ...cleanData,
-    updatedAt: new Date(),
-  }).where(and(eq(players.id, id), eq(players.tenantId, tenant.id))).returning()
+    return playerRepo.updateById<Player>(id, {
+      ...cleanData,
+      updatedAt: new Date(),
+    })
+  })
 
   if (!player) throw new Error("Player not found")
 
@@ -122,8 +122,13 @@ export const deletePlayer = withAuth("player:delete", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
+  const tenantId = tenant.id
 
-  await db.delete(players).where(and(eq(players.id, id), eq(players.tenantId, tenant.id)))
+  const deleted = await withTenantContext({ userId, tenantId }, () =>
+    playerRepo.deleteById(id)
+  )
+
+  if (!deleted) throw new Error("Player not found")
 
   revalidatePath("/dashboard/players")
   revalidatePath("/dashboard")
@@ -134,26 +139,31 @@ export const getPlayer = withAuth("player:read", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const [player] = await db.select().from(players)
-    .where(and(eq(players.id, id), eq(players.tenantId, tenant.id)))
-    .limit(1)
-  return player ?? null
+  const tenantId = tenant.id
+  
+  return withTenantContext({ userId, tenantId }, () =>
+    playerRepo.findById<Player>(id)
+  )
 })
 
 export const getPlayers = withAuth("player:read", async (filters: PlayerFilters) => {
   const tenant = await requireTenant()
+  const { userId } = await auth()
+  if (!userId) throw new Error("Unauthorized")
+  const tenantId = tenant.id
+
   const validated = playerFiltersSchema.parse({ ...filters, tenantId: tenant.id })
   const { teamId, role, status, search, page, pageSize, sortBy, sortOrder } = validated
   const offset = (page - 1) * pageSize
 
-  // Build where conditions
-  const conditions = [eq(players.tenantId, tenant.id)]
+  // Build where conditions (tenant isolation is handled by repository)
+  const conditions = []
   if (teamId) conditions.push(eq(players.teamId, teamId))
   if (role) conditions.push(eq(players.role, role))
   if (status) conditions.push(eq(players.status, status))
   if (search) conditions.push(ilike(players.name, `%${search}%`))
 
-  const whereClause = and(...conditions)
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
   // Sort
   const orderFn = sortOrder === "desc" ? desc : asc
@@ -161,23 +171,26 @@ export const getPlayers = withAuth("player:read", async (filters: PlayerFilters)
     : sortBy === "jerseyNumber" ? players.jerseyNumber
     : players.createdAt
 
-  // Execute query + count in parallel
-  const [data, [{ total }]] = await Promise.all([
-    db.select().from(players)
-      .where(whereClause)
-      .orderBy(orderFn(orderColumn))
-      .limit(pageSize)
-      .offset(offset),
-    db.select({ total: count() }).from(players).where(whereClause),
-  ])
+  return withTenantContext({ userId, tenantId }, async () => {
+    const [data, total] = await Promise.all([
+      playerRepo.findMany<Player>({
+        where: whereClause,
+        orderBy: orderFn(orderColumn),
+        limit: pageSize,
+        offset,
+      }),
+      playerRepo.count({ where: whereClause }),
+    ])
 
-  return {
-    data,
-    pagination: {
-      page,
-      pageSize,
-      total: Number(total),
-      totalPages: Math.ceil(Number(total) / pageSize),
-    },
-  }
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    }
+  })
 })
+

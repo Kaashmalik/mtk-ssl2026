@@ -39,7 +39,7 @@ function resolveRequestId(headers: Headers): string {
 
 // Extract tenant info from hostname (without database - Edge runtime compatible)
 function getTenantFromHost(host: string): { subdomain: string | null } {
-  // Check for subdomain pattern: {tenant}.ssl.cricket or {tenant}.localhost:3002
+  // Check for subdomain pattern: {tenant}.ssl.mtkcodex.site or {tenant}.localhost:3002
   const parts = host.split(".");
   if (parts.length >= 2) {
     const subdomain = parts[0];

@@ -3,14 +3,13 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
-import { Button } from "@mtk/ui/components/ui/button"
 import { Badge } from "@mtk/ui/components/ui/badge"
 import { getMyTenant } from "@/app/actions/tenants"
 import { TenantSettingsForm } from "@/components/settings/tenant-settings-form"
 import { db, tenantBranding } from "@mtk/database"
 import { eq } from "drizzle-orm"
 import { unstable_noStore as noStore } from "next/cache"
-import { Settings, CreditCard, ArrowRight } from "lucide-react"
+import { Settings, CreditCard } from "lucide-react"
 
 export default async function SettingsPage() {
   noStore()

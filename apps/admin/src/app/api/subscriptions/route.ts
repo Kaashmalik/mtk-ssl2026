@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { verifySuperAdmin } from "@/lib/admin-auth";
 import { db, subscriptionRequests, tenants, subscriptions, payments, users, commissionRates } from "@mtk/database";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod";
 
 /**
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
     const conditions = [];
     if (status && status !== "all") {
-      conditions.push(eq(subscriptionRequests.status, status));
+      conditions.push(eq(subscriptionRequests.status, status as "pending" | "approved" | "rejected" | "expired"));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

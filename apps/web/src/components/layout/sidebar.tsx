@@ -4,13 +4,27 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@mtk/ui/lib/utils"
 import { motion, AnimatePresence } from "framer-motion"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
-  LayoutDashboard, Users, Trophy, CalendarDays, Sword, Settings,
-  ChevronLeft, ChevronRight, BarChart3, Gamepad2
+  LayoutDashboard, Users, Trophy, Sword, Settings,
+  ChevronLeft, ChevronRight, BarChart3, Gamepad2, Shield, ClipboardList, UserCog
 } from "lucide-react"
 import { useUser } from "@clerk/nextjs"
 import { Button } from "@mtk/ui/components/ui/button"
+import { type UserRole, getNavigationForRole } from "@/lib/rbac"
+
+// Map icon string names from rbac.ts to actual Lucide components
+const ICON_MAP: Record<string, typeof LayoutDashboard> = {
+  LayoutDashboard,
+  Trophy,
+  Shield,
+  Users,
+  Swords: Sword,
+  BarChart3,
+  ClipboardList,
+  UserCog,
+  Settings,
+}
 
 type NavItem = {
   name: string
@@ -25,36 +39,67 @@ type NavGroup = {
   items: NavItem[]
 }
 
-const navGroups: NavGroup[] = [
+// Default navigation for when role hasn't loaded yet (minimal)
+const DEFAULT_NAV_GROUPS: NavGroup[] = [
   {
     label: "Management",
     items: [
       { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, shortcut: "⌘1" },
-      { name: "Teams", href: "/dashboard/teams", icon: Users, shortcut: "⌘2" },
-      { name: "Players", href: "/dashboard/players", icon: Sword, shortcut: "⌘3" },
-      { name: "Matches", href: "/dashboard/matches", icon: CalendarDays, shortcut: "⌘4", badge: "live" },
-      { name: "Tournaments", href: "/dashboard/tournaments", icon: Trophy, shortcut: "⌘5" },
-    ],
-  },
-  {
-    label: "Analytics",
-    items: [
-      { name: "Statistics", href: "/dashboard/stats", icon: BarChart3 },
-      { name: "Scoring", href: "/dashboard/scoring", icon: Gamepad2 },
-    ],
-  },
-  {
-    label: "System",
-    items: [
-      { name: "Settings", href: "/dashboard/settings", icon: Settings },
     ],
   },
 ]
 
-export function Sidebar() {
+// Keyboard shortcuts for the first 5 management items
+const SHORTCUTS = ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5"]
+
+/**
+ * Build RBAC-filtered navigation groups from the user's role.
+ */
+function buildNavGroups(role: UserRole): NavGroup[] {
+  const roleNav = getNavigationForRole(role)
+
+  // Map RBAC nav items to our NavItem format with icons
+  const items: NavItem[] = roleNav.map((item, i) => ({
+    name: item.label,
+    href: item.href,
+    icon: ICON_MAP[item.icon] || LayoutDashboard,
+    shortcut: i < SHORTCUTS.length ? SHORTCUTS[i] : undefined,
+    badge: item.label === "Matches" ? "live" as const : undefined,
+  }))
+
+  // Split items into groups
+  const managementItems = items.filter(i =>
+    ["/dashboard", "/dashboard/tournaments", "/dashboard/teams", "/dashboard/players", "/dashboard/matches"].includes(i.href)
+  )
+  const analyticsItems = items.filter(i =>
+    ["/dashboard/stats"].includes(i.href)
+  )
+  // Always add scoring if user has match:read or above
+  if (analyticsItems.length > 0 || managementItems.some(i => i.href === "/dashboard/matches")) {
+    analyticsItems.push({ name: "Scoring", href: "/dashboard/scoring", icon: Gamepad2 })
+  }
+  const systemItems = items.filter(i =>
+    ["/dashboard/registrations", "/dashboard/users", "/dashboard/settings"].includes(i.href)
+  )
+
+  const groups: NavGroup[] = []
+  if (managementItems.length > 0) groups.push({ label: "Management", items: managementItems })
+  if (analyticsItems.length > 0) groups.push({ label: "Analytics", items: analyticsItems })
+  if (systemItems.length > 0) groups.push({ label: "System", items: systemItems })
+
+  return groups.length > 0 ? groups : DEFAULT_NAV_GROUPS
+}
+
+export function Sidebar({ userRole }: { userRole?: UserRole }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const { user, isLoaded } = useUser()
+
+  // Build RBAC-filtered navigation
+  const navGroups = useMemo(() => {
+    if (!userRole) return DEFAULT_NAV_GROUPS
+    return buildNavGroups(userRole)
+  }, [userRole])
 
   // Keyboard shortcut to toggle sidebar
   useEffect(() => {
@@ -96,12 +141,13 @@ export function Sidebar() {
           size="icon"
           onClick={() => setCollapsed(!collapsed)}
           className="h-7 w-7 shrink-0"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
         </Button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-2">
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-2" aria-label="Main navigation">
         {navGroups.map((group) => (
           <div key={group.label} className="mb-2">
             <AnimatePresence>
@@ -131,6 +177,8 @@ export function Sidebar() {
                         : "text-muted-foreground"
                     )}
                     title={collapsed ? item.name : undefined}
+                    aria-label={collapsed ? item.name : undefined}
+                    aria-current={isActive ? "page" : undefined}
                   >
                     {isActive && (
                       <motion.div 

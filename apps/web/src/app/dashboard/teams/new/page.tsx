@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { toast } from "sonner"
 import { Button } from "@mtk/ui/components/ui/button"
 import { Input } from "@mtk/ui/components/ui/input"
 import { Label } from "@mtk/ui/components/ui/label"
@@ -10,10 +11,12 @@ import { Textarea } from "@mtk/ui/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Save, Loader2, Palette } from "lucide-react"
+import { createTeam } from "@/app/actions/teams"
 
 export default function NewTeamPage() {
   const router = useRouter()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: "", shortName: "", city: "", homeGround: "",
     primaryColor: "#2D8B4E", secondaryColor: "#1A4F8B",
@@ -24,15 +27,29 @@ export default function NewTeamPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    try {
-      await new Promise(r => setTimeout(r, 1000))
-      router.push("/dashboard/teams")
-    } catch (error) {
-      console.error("Failed to create team:", error)
-    } finally {
-      setIsSubmitting(false)
-    }
+    setError(null)
+
+    startTransition(async () => {
+      try {
+        await createTeam({
+          name: formData.name.trim(),
+          shortName: formData.shortName.trim() || null,
+          city: formData.city.trim() || null,
+          homeGround: formData.homeGround.trim() || null,
+          primaryColor: formData.primaryColor || null,
+          secondaryColor: formData.secondaryColor || null,
+          foundedYear: formData.foundedYear ? Number(formData.foundedYear) : null,
+          maxSquadSize: formData.maxSquadSize ? Number(formData.maxSquadSize) : 15,
+          description: formData.description.trim() || null,
+        })
+        toast.success("Team created successfully!")
+        router.push("/dashboard/teams")
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to create team"
+        setError(message)
+        toast.error(message)
+      }
+    })
   }
 
   return (
@@ -113,11 +130,17 @@ export default function NewTeamPage() {
           </Card>
         </MotionWrapper>
 
+        {error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
         <MotionWrapper variant="fadeInUp" delay={0.3}>
           <div className="flex items-center justify-end gap-3">
             <Link href="/dashboard/teams"><Button variant="outline" type="button">Cancel</Button></Link>
-            <Button type="submit" variant="gradient-shine" disabled={isSubmitting || !formData.name}>
-              {isSubmitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating...</> : <><Save className="h-4 w-4 mr-2" />Create Team</>}
+            <Button type="submit" variant="gradient-shine" disabled={isPending || !formData.name.trim()}>
+              {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating...</> : <><Save className="h-4 w-4 mr-2" />Create Team</>}
             </Button>
           </div>
         </MotionWrapper>

@@ -1,26 +1,27 @@
-# API Gateway Dockerfile
-FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat
-WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@8 --activate
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# API Gateway — Standalone NestJS (no workspace deps)
+# Build context: monorepo root
+ARG NODE_VERSION=22
 
-FROM node:20-alpine AS builder
+FROM node:${NODE_VERSION}-alpine AS builder
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@8 --activate
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN pnpm build
+# Root files needed for pnpm workspace resolution
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Entire service directory (handles src, proto, tsconfig, nest-cli.json, etc.)
+COPY services/api-gateway/ ./services/api-gateway/
+RUN pnpm install --frozen-lockfile --filter @ssl/api-gateway
+RUN pnpm --filter @ssl/api-gateway build
 
-FROM node:20-alpine AS runner
+FROM node:${NODE_VERSION}-alpine AS runner
+RUN apk add --no-cache tini curl
 WORKDIR /app
-ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nestjs
-COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
+COPY --from=builder --chown=nestjs:nodejs /app/services/api-gateway/dist ./dist
+COPY --from=builder --chown=nestjs:nodejs /app/services/api-gateway/node_modules ./node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/services/api-gateway/package.json ./package.json
 USER nestjs
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -f http://localhost:3000/api/v1/health || exit 1
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:3000/api/v1/health || exit 1
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/main.js"]

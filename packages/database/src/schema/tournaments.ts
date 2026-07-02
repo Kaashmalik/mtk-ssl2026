@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, date, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, date, integer, boolean, jsonb, numeric, pgEnum } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { users } from "./users";
@@ -26,8 +26,16 @@ export const tournaments = pgTable("tournaments", {
   startDate: date("start_date"),
   endDate: date("end_date"),
   registrationOpen: boolean("registration_open").default(false).notNull(),
+  registrationStart: timestamp("registration_start", { withTimezone: true }),
+  registrationEnd: timestamp("registration_end", { withTimezone: true }),
   registrationDeadline: date("registration_deadline"),
   maxTeams: integer("max_teams"),
+  entryFee: numeric("entry_fee", { precision: 10, scale: 2 }).default("0"),
+  prizePool: jsonb("prize_pool"),
+  rules: jsonb("rules"),
+  sponsors: jsonb("sponsors"),
+  liveStreamUrl: text("live_stream_url"),
+  isFeatured: boolean("is_featured").default(false).notNull(),
   status: tournamentStatusEnum("status").notNull().default("draft"),
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { toast } from "sonner"
 import { Button } from "@mtk/ui/components/ui/button"
 import { Input } from "@mtk/ui/components/ui/input"
 import { Label } from "@mtk/ui/components/ui/label"
@@ -11,10 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Save, Loader2 } from "lucide-react"
+import { createPlayer } from "@/app/actions/players"
 
 export default function NewPlayerPage() {
   const router = useRouter()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: "", email: "", phone: "", dateOfBirth: "",
     nationality: "", city: "",
@@ -29,17 +32,37 @@ export default function NewPlayerPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    try {
-      // TODO: Replace with createPlayer action when tenant is available
-      // await createPlayer({ ...formData, tenantId: currentTenantId })
-      await new Promise(r => setTimeout(r, 1000)) // Simulate API call
-      router.push("/dashboard/players")
-    } catch (error) {
-      console.error("Failed to create player:", error)
-    } finally {
-      setIsSubmitting(false)
-    }
+    setError(null)
+
+    startTransition(async () => {
+      try {
+        await createPlayer({
+          name: formData.name.trim(),
+          email: formData.email.trim() || null,
+          phone: formData.phone.trim() || null,
+          dateOfBirth: formData.dateOfBirth || null,
+          nationality: formData.nationality.trim() || null,
+          city: formData.city.trim() || null,
+          role: (formData.role || null) as
+            | "batsman" | "bowler" | "all_rounder" | "wicket_keeper" | "wicket_keeper_batsman"
+            | null,
+          battingStyle: (formData.battingStyle || null) as "right" | "left" | null,
+          bowlingStyle: (formData.bowlingStyle || null) as
+            | "right_arm_fast" | "right_arm_medium" | "right_arm_spin"
+            | "left_arm_fast" | "left_arm_medium" | "left_arm_spin" | null,
+          jerseyNumber: formData.jerseyNumber ? Number(formData.jerseyNumber) : null,
+          heightCm: formData.heightCm ? Number(formData.heightCm) : null,
+          weightKg: formData.weightKg ? Number(formData.weightKg) : null,
+          biography: formData.biography.trim() || null,
+        })
+        toast.success("Player registered successfully!")
+        router.push("/dashboard/players")
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to register player"
+        setError(message)
+        toast.error(message)
+      }
+    })
   }
 
   return (
@@ -153,12 +176,18 @@ export default function NewPlayerPage() {
           </Card>
         </MotionWrapper>
 
+        {error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
         {/* Actions */}
         <MotionWrapper variant="fadeInUp" delay={0.3}>
           <div className="flex items-center justify-end gap-3">
             <Link href="/dashboard/players"><Button variant="outline" type="button">Cancel</Button></Link>
-            <Button type="submit" variant="gradient-shine" disabled={isSubmitting || !formData.name}>
-              {isSubmitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : <><Save className="h-4 w-4 mr-2" />Register Player</>}
+            <Button type="submit" variant="gradient-shine" disabled={isPending || !formData.name.trim()}>
+              {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : <><Save className="h-4 w-4 mr-2" />Register Player</>}
             </Button>
           </div>
         </MotionWrapper>

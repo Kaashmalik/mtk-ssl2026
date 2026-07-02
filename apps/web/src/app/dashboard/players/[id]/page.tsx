@@ -5,7 +5,8 @@ import { Badge } from "@mtk/ui/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@mtk/ui/components/ui/tabs"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Edit, Heart, Trophy, Target, Crosshair, Shield } from "lucide-react"
-import { getPlayer } from "@/app/actions/players"
+import { getPlayer, deletePlayer } from "@/app/actions/players"
+import { DeleteButton } from "@/components/shared/delete-button"
 import { db, teams, battingScorecards, bowlingScorecards, matches, tournaments } from "@mtk/database"
 import { eq, inArray, desc } from "drizzle-orm"
 import { notFound } from "next/navigation"
@@ -210,6 +211,13 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
                     <Edit className="h-4 w-4 mr-1" />Edit
                   </Button>
                 </Link>
+                <DeleteButton
+                  action={deletePlayer}
+                  id={id}
+                  redirectHref="/dashboard/players"
+                  entityLabel="player"
+                  entityName={player.name}
+                />
               </div>
             </div>
           </CardContent>

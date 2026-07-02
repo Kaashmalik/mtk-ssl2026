@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from "next/server";
 import { verifySuperAdmin } from "@/lib/admin-auth";
-import { db, tenants, payments, subscriptions } from "@mtk/database";
-import { eq, sql, and, gte, desc } from "drizzle-orm";
+import { db, tenants, payments } from "@mtk/database";
+import { eq, and, gte, desc } from "drizzle-orm";
 
 /**
  * Standardized plan prices (PKR per league) — must match tenant_plan enum

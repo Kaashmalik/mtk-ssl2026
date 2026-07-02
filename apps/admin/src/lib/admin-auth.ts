@@ -1,39 +1,43 @@
 import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
-
-export function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
+import { db, users } from "@mtk/database";
+import { eq } from "drizzle-orm";
 
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL;
 
 /**
  * Verify the current request is from a super admin.
- * Uses Clerk v6 auth() which natively supports Next.js 15 async dynamic APIs.
+ * Uses Clerk v6 auth() and Drizzle to retrieve user roles.
  * Returns the userId string on success, null otherwise.
  */
 export async function verifySuperAdmin(): Promise<string | null> {
   const { userId } = await auth();
   if (!userId) return null;
 
-  const supabase = getSupabase();
-  const { data: user } = await supabase
-    .from("users")
-    .select("email, role")
-    .eq("id", userId)
-    .single();
+  try {
+    const [user] = await db
+      .select({ email: users.email, role: users.role })
+      .from(users)
+      .where(eq(users.clerkId, userId))
+      .limit(1);
 
-  const isRoleAdmin = user?.role === "super_admin";
-  const isEmailAdmin = SUPER_ADMIN_EMAIL && user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+    if (!user) {
+      return null;
+    }
 
-  if (!isRoleAdmin && !isEmailAdmin) {
+    const isRoleAdmin = user.role === "super_admin";
+    const isEmailAdmin =
+      SUPER_ADMIN_EMAIL &&
+      user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+
+    if (!isRoleAdmin && !isEmailAdmin) {
+      return null;
+    }
+
+    return userId;
+  } catch (error) {
+    console.error("verifySuperAdmin error:", error);
     return null;
   }
-
-  return userId;
 }
 
 /**
@@ -45,15 +49,14 @@ export async function isSuperAdmin(email: string): Promise<boolean> {
   }
 
   try {
-    const supabase = getSupabase();
-    const { data } = await supabase
-      .from("users")
-      .select("role")
-      .eq("email", email)
-      .single();
-    return data?.role === "super_admin";
+    const [user] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    return user?.role === "super_admin";
   } catch {
     return false;
   }
 }
-

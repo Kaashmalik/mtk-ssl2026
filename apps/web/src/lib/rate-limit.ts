@@ -1,19 +1,16 @@
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
 /**
- * Rate limiter with Redis-backed distributed counting.
+ * Rate limiter with Upstash Redis-backed distributed counting (Edge-compatible)
+ * or ioredis-backed sliding-window counting (Node-only).
  *
- * In production (when REDIS_URL is set), uses a sliding-window counter stored
- * in Redis so the limit is shared across all server instances (Vercel, K8s, etc.).
+ * In production / Edge environments, uses Upstash Redis if UPSTASH_REDIS_REST_URL and
+ * UPSTASH_REDIS_REST_TOKEN are set.
  *
- * In development (no Redis), falls back to an in-memory token-bucket — still
- * correct per-instance, just not shared.
+ * In Node environments, uses ioredis if REDIS_URL is set.
  *
- * Algorithm: fixed-window counter with key = `ratelimit:{key}:{window}`.
- *   1. INCR the counter
- *   2. If counter == 1, set EXPIRE to the window duration
- *   3. If counter > limit, reject
- *
- * This is the standard Redis rate-limiting pattern: simple, atomic, and
- * race-condition-free when using a single Redis instance.
+ * In development / fallback, uses an in-memory token-bucket.
  */
 
 // ---------------------------------------------------------------------------
@@ -92,7 +89,54 @@ function rateLimitMemory(
 }
 
 // ---------------------------------------------------------------------------
-// Redis-backed rate limiter
+// Upstash Redis-backed rate limiter (Edge & Node compatible)
+// ---------------------------------------------------------------------------
+
+const upstashLimiters = new Map<string, Ratelimit>();
+
+function getUpstashLimiter(limit: number, windowMs: number): Ratelimit | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+
+  const key = `${limit}:${windowMs}`;
+  let limiter = upstashLimiters.get(key);
+  if (!limiter) {
+    limiter = new Ratelimit({
+      redis: new Redis({ url, token }),
+      limiter: Ratelimit.slidingWindow(limit, `${windowMs} ms`),
+      analytics: true,
+      prefix: "ratelimit",
+    });
+    upstashLimiters.set(key, limiter);
+  }
+  return limiter;
+}
+
+async function rateLimitUpstash(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<RateLimitResult | null> {
+  const limiter = getUpstashLimiter(limit, windowMs);
+  if (!limiter) return null;
+
+  try {
+    const { success, remaining, reset } = await limiter.limit(key);
+    return {
+      success,
+      remaining,
+      reset: Math.ceil(reset / 1000), // Convert to UNIX timestamp in seconds
+      limit,
+    };
+  } catch (err) {
+    console.warn("[rate-limit] Upstash rate limit failed, falling back:", err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Redis-backed rate limiter (Node-only)
 // ---------------------------------------------------------------------------
 
 type RedisClient = {
@@ -119,8 +163,8 @@ async function getRedis(): Promise<RedisClient | null> {
   }
 
   try {
-    const { default: Redis } = await import("ioredis");
-    const client = new Redis(url, {
+    const { default: RedisClient } = await import("ioredis");
+    const client = new RedisClient(url, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
       connectTimeout: 1000,
@@ -194,11 +238,19 @@ export async function rateLimit(
   limit = 60,
   windowMs = 60000
 ): Promise<RateLimitResult> {
-  const windowSec = Math.ceil(windowMs / 1000);
+  // 1. Try Upstash Redis first (Edge-compatible, distributed, works in Next.js Middleware)
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const upstashResult = await rateLimitUpstash(key, limit, windowMs);
+    if (upstashResult !== null) return upstashResult;
+  }
 
+  // 2. Try Standard Redis (Node-only)
   if (process.env.REDIS_URL) {
+    const windowSec = Math.ceil(windowMs / 1000);
     return rateLimitRedis(key, limit, windowSec);
   }
 
+  // 3. Fallback to Local In-Memory
   return rateLimitMemory(key, limit, windowMs);
 }
+

@@ -150,10 +150,10 @@ export async function POST(request: NextRequest) {
     const { dkimPublicKeyRecord, dkimPrivateKeyPem } = generateDkimKeyPair();
 
     // Generate SPF record
-    const spfRecord = `v=spf1 include:_spf.ssl.cricket ~all`;
+    const spfRecord = `v=spf1 include:_spf.ssl.mtkcodex.site ~all`;
 
     // Generate DMARC record
-    const dmarcRecord = `v=DMARC1; p=none; rua=mailto:dmarc@ssl.cricket`;
+    const dmarcRecord = `v=DMARC1; p=none; rua=mailto:dmarc@ssl.mtkcodex.site`;
 
     const verificationData = {
       tenantId: tenant[0].id,
