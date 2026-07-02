@@ -11,16 +11,27 @@ import { Textarea } from "@mtk/ui/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Save, Loader2, Palette } from "lucide-react"
-import { createTeam } from "@/app/actions/teams"
+import { updateTeam } from "@/app/actions/teams"
+import type { Team } from "@mtk/database"
 
-export default function NewTeamPage() {
+interface EditTeamFormProps {
+  team: Team
+}
+
+export function EditTeamForm({ team }: EditTeamFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    name: "", shortName: "", city: "", homeGround: "",
-    primaryColor: "#2D8B4E", secondaryColor: "#1A4F8B",
-    foundedYear: "", maxSquadSize: "15", description: "",
+    name: team.name ?? "",
+    shortName: team.shortName ?? "",
+    city: team.city ?? "",
+    homeGround: team.homeGround ?? "",
+    primaryColor: team.primaryColor ?? "#2D8B4E",
+    secondaryColor: team.secondaryColor ?? "#1A4F8B",
+    foundedYear: team.foundedYear?.toString() ?? "",
+    maxSquadSize: team.maxSquadSize?.toString() ?? "15",
+    description: team.description ?? "",
   })
 
   const updateField = (key: string, value: string) => setFormData(prev => ({ ...prev, [key]: value }))
@@ -31,7 +42,7 @@ export default function NewTeamPage() {
 
     startTransition(async () => {
       try {
-        await createTeam({
+        await updateTeam(team.id, {
           name: formData.name.trim(),
           shortName: formData.shortName.trim() || null,
           city: formData.city.trim() || null,
@@ -42,10 +53,10 @@ export default function NewTeamPage() {
           maxSquadSize: formData.maxSquadSize ? Number(formData.maxSquadSize) : 15,
           description: formData.description.trim() || null,
         })
-        toast.success("Team created successfully!")
-        router.push("/dashboard/teams")
+        toast.success("Team updated successfully!")
+        router.push(`/dashboard/teams/${team.id}`)
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to create team"
+        const message = err instanceof Error ? err.message : "Failed to update team"
         setError(message)
         toast.error(message)
       }
@@ -56,10 +67,10 @@ export default function NewTeamPage() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <MotionWrapper variant="fadeInLeft">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/teams"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-2" />Back</Button></Link>
+          <Link href={`/dashboard/teams/${team.id}`}><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-2" />Back</Button></Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Create Team</h1>
-            <p className="text-muted-foreground mt-1">Register a new team for your league.</p>
+            <h1 className="text-3xl font-bold tracking-tight">Edit Team</h1>
+            <p className="text-muted-foreground mt-1">Update team details for {team.name}.</p>
           </div>
         </div>
       </MotionWrapper>
@@ -115,7 +126,6 @@ export default function NewTeamPage() {
                   <Input value={formData.secondaryColor} onChange={(e) => updateField("secondaryColor", e.target.value)} className="font-mono" />
                 </div>
               </div>
-              {/* Preview */}
               <div className="sm:col-span-2">
                 <Label>Preview</Label>
                 <div className="mt-2 h-16 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg" style={{ background: `linear-gradient(135deg, ${formData.primaryColor}, ${formData.secondaryColor})` }}>
@@ -138,9 +148,9 @@ export default function NewTeamPage() {
 
         <MotionWrapper variant="fadeInUp" delay={0.3}>
           <div className="flex items-center justify-end gap-3">
-            <Link href="/dashboard/teams"><Button variant="outline" type="button">Cancel</Button></Link>
+            <Link href={`/dashboard/teams/${team.id}`}><Button variant="outline" type="button">Cancel</Button></Link>
             <Button type="submit" variant="gradient-shine" disabled={isPending || !formData.name.trim()}>
-              {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating...</> : <><Save className="h-4 w-4 mr-2" />Create Team</>}
+              {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : <><Save className="h-4 w-4 mr-2" />Save Changes</>}
             </Button>
           </div>
         </MotionWrapper>

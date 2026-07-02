@@ -5,7 +5,8 @@ import { Badge } from "@mtk/ui/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@mtk/ui/components/ui/tabs"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Users, Edit } from "lucide-react"
-import { getTournament } from "@/app/actions/tournaments"
+import { getTournament, deleteTournament } from "@/app/actions/tournaments"
+import { DeleteButton } from "@/components/shared/delete-button"
 import { db, teams, matches, matchInnings } from "@mtk/database"
 import { eq, asc } from "drizzle-orm"
 import { notFound } from "next/navigation"
@@ -194,6 +195,13 @@ export default async function TournamentDetailPage({ params }: { params: Promise
                     <Edit className="h-4 w-4 mr-1" />Edit
                   </Button>
                 </Link>
+                <DeleteButton
+                  action={deleteTournament}
+                  id={id}
+                  redirectHref="/dashboard/tournaments"
+                  entityLabel="tournament"
+                  entityName={tournament.name}
+                />
               </div>
             </div>
           </CardContent>

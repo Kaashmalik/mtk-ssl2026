@@ -12,18 +12,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Save, Loader2 } from "lucide-react"
-import { createPlayer } from "@/app/actions/players"
+import { updatePlayer } from "@/app/actions/players"
+import type { Player } from "@mtk/database"
 
-export default function NewPlayerPage() {
+interface EditPlayerFormProps {
+  player: Player
+}
+
+export function EditPlayerForm({ player }: EditPlayerFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    name: "", email: "", phone: "", dateOfBirth: "",
-    nationality: "", city: "",
-    role: "", battingStyle: "", bowlingStyle: "",
-    jerseyNumber: "", heightCm: "", weightKg: "",
-    biography: "",
+    name: player.name ?? "",
+    email: player.email ?? "",
+    phone: player.phone ?? "",
+    dateOfBirth: player.dateOfBirth ?? "",
+    nationality: player.nationality ?? "",
+    city: player.city ?? "",
+    role: player.role ?? "",
+    battingStyle: player.battingStyle ?? "",
+    bowlingStyle: player.bowlingStyle ?? "",
+    jerseyNumber: player.jerseyNumber?.toString() ?? "",
+    heightCm: player.heightCm?.toString() ?? "",
+    weightKg: player.weightKg?.toString() ?? "",
+    biography: player.biography ?? "",
   })
 
   const updateField = (key: string, value: string) => {
@@ -36,7 +49,7 @@ export default function NewPlayerPage() {
 
     startTransition(async () => {
       try {
-        await createPlayer({
+        await updatePlayer(player.id, {
           name: formData.name.trim(),
           email: formData.email.trim() || null,
           phone: formData.phone.trim() || null,
@@ -55,10 +68,10 @@ export default function NewPlayerPage() {
           weightKg: formData.weightKg ? Number(formData.weightKg) : null,
           biography: formData.biography.trim() || null,
         })
-        toast.success("Player registered successfully!")
-        router.push("/dashboard/players")
+        toast.success("Player updated successfully!")
+        router.push(`/dashboard/players/${player.id}`)
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to register player"
+        const message = err instanceof Error ? err.message : "Failed to update player"
         setError(message)
         toast.error(message)
       }
@@ -67,21 +80,19 @@ export default function NewPlayerPage() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      {/* Header */}
       <MotionWrapper variant="fadeInLeft">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/players">
+          <Link href={`/dashboard/players/${player.id}`}>
             <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Register Player</h1>
-            <p className="text-muted-foreground mt-1">Add a new player to your league database.</p>
+            <h1 className="text-3xl font-bold tracking-tight">Edit Player</h1>
+            <p className="text-muted-foreground mt-1">Update details for {player.name}.</p>
           </div>
         </div>
       </MotionWrapper>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Personal Information */}
         <MotionWrapper variant="fadeInUp" delay={0.1}>
           <Card>
             <CardHeader><CardTitle className="text-lg">Personal Information</CardTitle></CardHeader>
@@ -114,7 +125,6 @@ export default function NewPlayerPage() {
           </Card>
         </MotionWrapper>
 
-        {/* Cricket Details */}
         <MotionWrapper variant="fadeInUp" delay={0.2}>
           <Card>
             <CardHeader><CardTitle className="text-lg">Cricket Details</CardTitle></CardHeader>
@@ -182,12 +192,11 @@ export default function NewPlayerPage() {
           </div>
         )}
 
-        {/* Actions */}
         <MotionWrapper variant="fadeInUp" delay={0.3}>
           <div className="flex items-center justify-end gap-3">
-            <Link href="/dashboard/players"><Button variant="outline" type="button">Cancel</Button></Link>
+            <Link href={`/dashboard/players/${player.id}`}><Button variant="outline" type="button">Cancel</Button></Link>
             <Button type="submit" variant="gradient-shine" disabled={isPending || !formData.name.trim()}>
-              {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : <><Save className="h-4 w-4 mr-2" />Register Player</>}
+              {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : <><Save className="h-4 w-4 mr-2" />Save Changes</>}
             </Button>
           </div>
         </MotionWrapper>
