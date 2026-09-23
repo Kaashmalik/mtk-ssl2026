@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { ScoringService } from './scoring.service';
 import { Logger } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
 
 interface BallEvent {
   matchId: string;
@@ -222,6 +223,9 @@ export class ScoringGateway implements OnGatewayConnection, OnGatewayDisconnect 
       : headerValue;
 
     const token = tokenFromAuth || tokenFromHeader;
-    return token === requiredToken;
+    if (typeof token !== 'string' || token.length === 0) return false;
+    const a = Buffer.from(token);
+    const b = Buffer.from(requiredToken);
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 }

@@ -5,6 +5,7 @@ import { APP_FILTER } from '@nestjs/core';
 import { ScoringService } from './scoring.service';
 import { ScoringGateway } from './scoring.gateway';
 import { ScoringController } from './scoring.controller';
+import { KafkaScoringPublisher } from './kafka-scoring-publisher.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 @Module({
@@ -37,6 +38,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
   providers: [
     ScoringService,
     ScoringGateway,
+    KafkaScoringPublisher,
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,

@@ -8,9 +8,14 @@ import {
   NewMatchBall,
   scoringEvents,
   scorecardProjections,
+  players,
 } from '@mtk/database';
 import Redis from 'ioredis';
 import { env } from './env';
+import {
+  KafkaScoringPublisher,
+  ScoringBallEventPayload,
+} from './kafka-scoring-publisher.service';
 
 export interface BallEvent {
   matchId: string;
@@ -60,7 +65,7 @@ export class ScoringService {
   private readonly logger = new Logger(ScoringService.name);
   private readonly redis: Redis;
 
-  constructor() {
+  constructor(private readonly kafkaPublisher: KafkaScoringPublisher) {
     this.redis = new Redis({
       host: env.REDIS_HOST,
       port: env.REDIS_PORT,
@@ -139,7 +144,7 @@ export class ScoringService {
   async recordBall(ballEvent: BallEvent): Promise<BallResult> {
     const { matchId, inningsId } = ballEvent;
 
-    return await db.transaction(async (tx) => {
+    const { result, publishData } = await db.transaction(async (tx) => {
       // 1. Validate match exists and is in a scorable state
       const match = await tx.query.matches.findFirst({
         where: eq(matches.id, matchId),
@@ -223,24 +228,26 @@ export class ScoringService {
         .where(eq(scoringEvents.aggregateId, inningsId));
       const nextSeq = (lastEvent[0]?.seq || 0) + 1;
 
-      await tx.insert(scoringEvents).values({
-        tenantId: match.tenantId,
-        matchId: matchId,
-        inningsId: inningsId,
-        eventType: 'ball_recorded',
-        eventVersion: 1,
-        aggregateId: inningsId,
-        sequenceNumber: nextSeq,
-        payload: {
-          runs: totalRuns,
-          is_wicket: isWicket,
-          is_wide: isWide,
-          is_no_ball: isNoBall,
-          is_bye: isBye,
-          is_leg_bye: isLegBye,
-          batsman_runs: ballEvent.runs,
-        },
-      });
+      const [recordedEvent] = await tx.insert(scoringEvents)
+        .values({
+          tenantId: match.tenantId,
+          matchId: matchId,
+          inningsId: inningsId,
+          eventType: 'ball_recorded',
+          eventVersion: 1,
+          aggregateId: inningsId,
+          sequenceNumber: nextSeq,
+          payload: {
+            runs: totalRuns,
+            is_wicket: isWicket,
+            is_wide: isWide,
+            is_no_ball: isNoBall,
+            is_bye: isBye,
+            is_leg_bye: isLegBye,
+            batsman_runs: ballEvent.runs,
+          },
+        })
+        .returning({ id: scoringEvents.id, sequenceNumber: scoringEvents.sequenceNumber });
 
       // 5. Insert the ball record
       const ballInsert: NewMatchBall = {
@@ -332,14 +339,73 @@ export class ScoringService {
         scorecard,
       };
 
+      // Resolve player names for downstream consumers (commentary fallback, notifications)
+      const [batsmanPlayer, bowlerPlayer] = await Promise.all([
+        ballEvent.batsmanId
+          ? tx.query.players.findFirst({ where: eq(players.id, ballEvent.batsmanId) })
+          : Promise.resolve(null),
+        ballEvent.bowlerId
+          ? tx.query.players.findFirst({ where: eq(players.id, ballEvent.bowlerId) })
+          : Promise.resolve(null),
+      ]);
+
+      if (!recordedEvent) {
+        throw new Error('Failed to persist scoring event');
+      }
+
+      const publishData: ScoringBallEventPayload = {
+        type: isWicket ? 'WICKET' : isSix ? 'SIX_HIT' : isFour ? 'FOUR_HIT' : 'BALL_RECORDED',
+        data: {
+          tenantId: match.tenantId,
+          matchId,
+          inningsId,
+          runs: totalRuns,
+          batsmanName: batsmanPlayer?.name ?? '',
+          bowlerName: bowlerPlayer?.name ?? '',
+          over: ballEvent.over,
+          ball: ballEvent.ball,
+        },
+        eventId: recordedEvent.id,
+        matchId,
+        tenantId: match.tenantId,
+        inning: updatedInnings.inningsNumber,
+        over: ballEvent.over,
+        ball: ballEvent.ball,
+        runs: totalRuns,
+        extras: ballEvent.extras
+          ? { type: ballEvent.extras.type, runs: ballEvent.extras.runs }
+          : undefined,
+        wicket: ballEvent.wicket
+          ? {
+              type: ballEvent.wicket.type,
+              playerOut: ballEvent.wicket.playerId,
+              dismissedBy: ballEvent.wicket.fielderId,
+            }
+          : undefined,
+        batsmanId: ballEvent.batsmanId,
+        bowlerId: ballEvent.bowlerId,
+        batsmanName: batsmanPlayer?.name,
+        bowlerName: bowlerPlayer?.name,
+        sequenceNumber: recordedEvent.sequenceNumber,
+        timestamp: new Date().toISOString(),
+      };
+
       // Invalidate cache after database transaction commits
       const cacheKey = `match:state:${matchId}`;
       this.redis.del(cacheKey).catch((err) => 
         this.logger.warn(`Failed to invalidate match state cache: ${err}`)
       );
 
-      return result;
+      return { result, publishData };
     });
+
+    // Publish AFTER commit — a slow/failed Kafka broker must never roll back a
+    // recorded ball. KafkaScoringPublisher swallows failures and logs them.
+    this.kafkaPublisher.publishBallEvent(publishData).catch((err) =>
+      this.logger.warn(`Failed to publish ball event after commit: ${err}`),
+    );
+
+    return result;
   }
 
   async undoBall(matchId: string, ballId: string): Promise<BallResult> {
