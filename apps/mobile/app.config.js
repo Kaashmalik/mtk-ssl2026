@@ -80,6 +80,8 @@ module.exports = {
   ],
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://api.ssl.mtkcodex.site",
+    scoringServiceUrl:
+      process.env.EXPO_PUBLIC_SCORING_SERVICE_URL || "http://localhost:4002",
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || "",
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
   },

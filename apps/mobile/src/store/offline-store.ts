@@ -5,6 +5,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export interface BallData {
   id: string;
   matchId: string;
+  /** UUID of match_innings row — required to sync to scoring-service */
+  inningsId?: string;
   innings: number;
   over: number;
   ball: number;
@@ -13,6 +15,10 @@ export interface BallData {
   wicketType?: string;
   batsmanId?: string;
   bowlerId?: string;
+  isWide?: boolean;
+  isNoBall?: boolean;
+  isBye?: boolean;
+  isLegBye?: boolean;
   timestamp: number;
   synced: boolean;
 }
