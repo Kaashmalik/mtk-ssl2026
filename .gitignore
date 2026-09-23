@@ -35,6 +35,7 @@ pnpm-debug.log*
 # MCP config (may contain tokens — keep local only)
 .mcp.json
 .mcp.local.json
+.cursor/mcp.json
 
 
 # Vercel

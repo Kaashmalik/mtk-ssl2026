@@ -1,9 +1,9 @@
 -- =============================================================================
 -- 024: Harden PostgREST exposure for role / impersonation tables
 --
--- Live grant check (Wave C): the Cursor-linked Supabase MCP project is NOT
--- mtk-ssl (dairy schema). Apply this migration on the SSL Supabase project
--- via `supabase db push` / CI — do not assume MCP `execute_sql` hit SSL.
+-- Live grant check (Wave C): applied on SSL project `anxstufkbqnjkxgksfkn`
+-- (mtkshakirsuperleague). Cursor MCP was previously pointed at an unrelated
+-- dairy project — configure `--project-ref anxstufkbqnjkxgksfkn` for SSL.
 --
 -- Goal: even if anon/authenticated somehow hold default PUBLIC grants,
 -- PostgREST cannot read role membership or impersonation sessions.
