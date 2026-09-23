@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { ConfigService } from '@nestjs/config';
 import { StripeProvider } from './providers/stripe.provider';
 import { JazzCashProvider } from './providers/jazzcash.provider';
+import { env } from './env';
 
 interface CreatePaymentDto {
   tenantId: string;
@@ -47,6 +48,12 @@ export class PaymentService {
     // Validate amount
     if (dto.amount <= 0) {
       throw new BadRequestException('Amount must be greater than 0');
+    }
+
+    if (!env.ONLINE_PAYMENTS_ENABLED) {
+      throw new BadRequestException(
+        'Online payment providers are disabled until merchant credentials are live. Use manual JazzCash / EasyPaisa / bank transfer via the web app.',
+      );
     }
 
     let providerResult: { paymentId: string; checkoutUrl?: string };
