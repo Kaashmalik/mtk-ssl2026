@@ -3,6 +3,9 @@ import { getUserRoleAndTenantIds } from "@/lib/rbac-server"
 import { DashboardShell } from "./dashboard-shell"
 import type { UserRole } from "@/lib/rbac"
 
+/** Auth + tenant data — never statically prerender dashboard pages. */
+export const dynamic = "force-dynamic"
+
 export default async function DashboardLayout({
     children,
 }: {

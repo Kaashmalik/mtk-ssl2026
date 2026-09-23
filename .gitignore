@@ -64,3 +64,4 @@ pnpm-debug.log*
 # OS
 Thumbs.db
 
+.env*.local

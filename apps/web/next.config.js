@@ -1,3 +1,48 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Next.js config is CommonJS; Sentry wrap needs require() */
+const path = require("path");
+const fs = require("fs");
+
+/**
+ * Monorepo: Next only auto-loads env from apps/web. Pull root env so local
+ * builds see Clerk/Supabase keys without duplicating files per app.
+ */
+function loadRootEnv() {
+  const root = path.join(__dirname, "../..");
+  const files = [".env", ".env.local"];
+  if (process.env.NODE_ENV === "production") {
+    files.push(".env.production", ".env.production.local");
+  } else {
+    files.push(".env.development", ".env.development.local");
+  }
+
+  const isPlaceholder = (val) =>
+    /your_|replace_with|placeholder|changeme|example\.com/i.test(val) ||
+    val.length < 20;
+
+  for (const name of files) {
+    const filePath = path.join(root, name);
+    if (!fs.existsSync(filePath)) continue;
+    for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let val = trimmed.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (!val || isPlaceholder(val)) continue;
+      process.env[key] = val;
+    }
+  }
+}
+
+loadRootEnv();
+
 const { z } = require("zod");
 
 z.object({
@@ -14,6 +59,13 @@ const nextConfig = {
   },
   typescript: {
     ignoreBuildErrors: false,
+  },
+  // Ensure client bundle receives public keys loaded from monorepo root
+  env: {
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "",
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000",
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000",
   },
   images: {
     remotePatterns: [
@@ -46,13 +98,14 @@ const nextConfig = {
   },
 };
 
-// Only wrap with Sentry in production builds.
-// In dev mode, Sentry's withSentryConfig breaks Turbopack by injecting
-// client-side instrumentation when the SDK isn't available in the browser,
-// causing "(void 0) is not a function" runtime errors on every component.
+// Sentry webpack plugin calls sentry-cli during build. Only enable when
+// CI or SENTRY_UPLOAD=1 — a present-but-wrong token must not break builds.
 const isDev = process.env.NODE_ENV !== "production";
+const sentryEnabled =
+  Boolean(process.env.SENTRY_AUTH_TOKEN) &&
+  (process.env.CI === "true" || process.env.SENTRY_UPLOAD === "1");
 
-if (isDev) {
+if (isDev || !sentryEnabled) {
   module.exports = nextConfig;
 } else {
   const { withSentryConfig } = require("@sentry/nextjs");

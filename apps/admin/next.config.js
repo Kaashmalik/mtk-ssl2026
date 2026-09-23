@@ -1,3 +1,41 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Next.js config is CommonJS; Sentry wrap needs require() */
+const path = require("path");
+const fs = require("fs");
+
+function loadRootEnv() {
+  const root = path.join(__dirname, "../..");
+  const files = [".env", ".env.local"];
+  if (process.env.NODE_ENV === "production") {
+    files.push(".env.production", ".env.production.local");
+  } else {
+    files.push(".env.development", ".env.development.local");
+  }
+  const isPlaceholder = (val) =>
+    /your_|replace_with|placeholder|changeme|example\.com/i.test(val) ||
+    val.length < 20;
+  for (const name of files) {
+    const filePath = path.join(root, name);
+    if (!fs.existsSync(filePath)) continue;
+    for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let val = trimmed.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (!val || isPlaceholder(val)) continue;
+      process.env[key] = val;
+    }
+  }
+}
+loadRootEnv();
+
 /** @type {import('next').NextConfig} */
 
 const securityHeaders = [
@@ -59,6 +97,14 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  env: {
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "",
+    NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME:
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "",
+    NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET:
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "",
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 3600,
@@ -118,11 +164,12 @@ const nextConfig = {
 
 module.exports = nextConfig;
 
-// Only wrap with Sentry in production builds.
-// In dev mode, Sentry's withSentryConfig breaks Turbopack by injecting
-// client-side instrumentation when the SDK isn't available in the browser,
-// causing "(void 0) is not a function" runtime errors on every component.
-if (process.env.NODE_ENV === "production") {
+// Sentry upload only when CI or SENTRY_UPLOAD=1 (token alone is not enough).
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.SENTRY_AUTH_TOKEN &&
+  (process.env.CI === "true" || process.env.SENTRY_UPLOAD === "1")
+) {
   const { withSentryConfig } = require("@sentry/nextjs");
   module.exports = withSentryConfig(nextConfig, {
     org: process.env.SENTRY_ORG || "shakir-super-league",
