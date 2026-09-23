@@ -71,7 +71,7 @@ const PLANS = [
     features: [
       "Unlimited teams & players",
       "Live streaming",
-      "Fantasy cricket",
+      "Fantasy cricket (roadmap)",
       "White-label option",
       "Priority support",
       "Advanced analytics",
