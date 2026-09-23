@@ -112,8 +112,17 @@ export class MediasoupRouterService implements OnModuleInit, OnModuleDestroy {
       initialAvailableOutgoingBitrate: 1000000,
     });
 
-    transport.on('dtlsstatechange', (dtlsState) => {
+    const onDtlsChange = (dtlsState: mediasoup.types.DtlsState) => {
       if (dtlsState === 'closed') transport.close();
+    };
+    transport.on('dtlsstatechange', onDtlsChange);
+
+    transport.observer.once('close', () => {
+      // Remove the listener we registered above so this transport is not
+      // retained by the emitter after it is closed. Producers/consumers
+      // created on this transport are auto-closed by mediasoup.
+      transport.removeListener('dtlsstatechange', onDtlsChange);
+      room.transports.delete(transport.id);
     });
 
     room.transports.set(transport.id, transport);
@@ -128,6 +137,9 @@ export class MediasoupRouterService implements OnModuleInit, OnModuleDestroy {
     if (!transport) throw new Error(`Transport ${transportId} not found`);
 
     const producer = await transport.produce({ kind, rtpParameters });
+    producer.observer.once('close', () => {
+      room.producers.delete(producer.id);
+    });
     room.producers.set(producer.id, producer);
     this.logger.log(`Producer ${producer.id} created in room ${roomId}`);
     return producer;
@@ -151,8 +163,34 @@ export class MediasoupRouterService implements OnModuleInit, OnModuleDestroy {
       paused: true,
     });
 
+    consumer.observer.once('close', () => {
+      room.consumers.delete(consumer.id);
+    });
     room.consumers.set(consumer.id, consumer);
     this.logger.log(`Consumer ${consumer.id} created for producer ${producerId}`);
     return consumer;
+  }
+
+  /**
+   * Close the media resources owned by a single client and drop them from the
+   * room maps. Producers are closed first (their transport stays open so any
+   * other producers on it survive), then the client's transports.
+   */
+  async closeClientResources(
+    roomId: string,
+    producerIds: string[],
+    transportIds: string[],
+  ): Promise<void> {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+
+    for (const id of producerIds) {
+      const producer = room.producers.get(id);
+      if (producer && !producer.closed) producer.close();
+    }
+    for (const id of transportIds) {
+      const transport = room.transports.get(id);
+      if (transport && !transport.closed) transport.close();
+    }
   }
 }

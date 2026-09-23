@@ -11,4 +11,5 @@ export const env = z.object({
   RTC_MIN_PORT: z.coerce.number().default(40000),
   RTC_MAX_PORT: z.coerce.number().default(49999),
   CORS_ORIGIN: z.string().default('http://localhost:3001'),
+  STREAMING_ACCESS_TOKEN: z.string().optional(),
 }).parse(process.env);
