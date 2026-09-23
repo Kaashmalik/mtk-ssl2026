@@ -413,135 +413,161 @@ function ScoringInterface() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 sm:p-6 space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Live Scoring</h1>
-          <div className="flex items-center gap-3 mt-2">
-            {matchData && (
-              <span className="text-sm font-medium text-muted-foreground">
-                {matchData.teamA.name} vs {matchData.teamB.name}
-                {matchData.match.totalOvers && ` · ${matchData.match.totalOvers} overs`}
-              </span>
-            )}
-            {isOnline ? (
-              <span className="flex items-center gap-1 text-green-600 text-sm">
-                <Wifi className="h-4 w-4" />
-                Online
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-orange-600 text-sm">
-                <WifiOff className="h-4 w-4" />
-                Offline
-              </span>
-            )}
-            {dbWriteFailed && (
-              <span className="flex items-center gap-1 text-red-600 text-sm" role="alert">
-                <AlertCircle className="h-3 w-3" />
-                Unsaved changes
-              </span>
-            )}
-            {isPending && (
-              <span className="flex items-center gap-1 text-blue-600 text-sm">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Saving...
-              </span>
-            )}
+    <div
+      className="min-h-screen bg-background px-3 pt-2 sm:p-6 space-y-3 sm:space-y-6 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+    >
+      {/* Sticky mobile header: score + connection + undo */}
+      <div className="sticky top-0 z-20 -mx-3 px-3 py-2 sm:static sm:mx-0 sm:px-0 sm:py-0 bg-background/95 backdrop-blur border-b sm:border-0 supports-[backdrop-filter]:bg-background/80">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-3xl font-bold truncate">
+                {matchData ? (
+                  <span className="sm:hidden">
+                    {matchData.teamA.name.slice(0, 12)} vs {matchData.teamB.name.slice(0, 12)}
+                  </span>
+                ) : null}
+                <span className="hidden sm:inline">Live Scoring</span>
+              </h1>
+              {isOnline ? (
+                <span className="flex items-center gap-1 text-green-600 text-xs sm:text-sm shrink-0">
+                  <Wifi className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <span className="hidden xs:inline sm:inline">Online</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-orange-600 text-xs sm:text-sm shrink-0">
+                  <WifiOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  Offline
+                </span>
+              )}
+              {dbWriteFailed && (
+                <span className="flex items-center gap-1 text-red-600 text-xs" role="alert">
+                  <AlertCircle className="h-3 w-3" />
+                  Unsaved
+                </span>
+              )}
+              {isPending && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+              )}
+            </div>
+            <div className="hidden sm:block text-sm text-muted-foreground mt-1">
+              {matchData && (
+                <span>
+                  {matchData.teamA.name} vs {matchData.teamB.name}
+                  {matchData.match.totalOvers && ` · ${matchData.match.totalOvers} overs`}
+                </span>
+              )}
+            </div>
+            <div className="sm:hidden mt-1.5">
+              <LiveScorecard compact targetRuns={targetRuns} totalOvers={totalOvers} />
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={handleUndo}
-            variant="outline"
-            size="sm"
-            className="touch-manipulation"
-          >
-            <Undo2 className="h-4 w-4 mr-1" />
-            Undo
-          </Button>
-          <Button
-            onClick={redo}
-            variant="outline"
-            size="sm"
-            className="touch-manipulation"
-          >
-            <Redo2 className="h-4 w-4 mr-1" />
-            Redo
-          </Button>
-          {currentInningsNum === 2 && targetRuns && (
-            <DLSCalculator
-              targetRuns={targetRuns}
-              oversCompleted={currentInningsData ? currentInningsData.currentOver + currentInningsData.currentBall / 6 : 0}
-              totalOvers={totalOvers}
-              wicketsLost={currentInningsData?.totalWickets || 0}
-              runsScored={currentInningsData?.totalRuns || 0}
-              onApply={(revisedTarget) => {
-                console.log("DLS target applied:", revisedTarget);
-              }}
-            />
-          )}
-          {currentInningsNum === "super_over" && (
+          <div className="flex gap-1.5 shrink-0">
             <Button
-              onClick={() => resetInnings("super_over")}
+              onClick={handleUndo}
               variant="outline"
               size="sm"
+              className="touch-manipulation min-h-10 min-w-10 px-2 sm:px-3"
+              aria-label="Undo"
             >
-              <Zap className="h-4 w-4 mr-1" />
-              Super Over
+              <Undo2 className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Undo</span>
             </Button>
-          )}
+            <Button
+              onClick={redo}
+              variant="outline"
+              size="sm"
+              className="touch-manipulation min-h-10 min-w-10 px-2 sm:px-3 hidden sm:inline-flex"
+              aria-label="Redo"
+            >
+              <Redo2 className="h-4 w-4 mr-1" />
+              Redo
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Innings Selector */}
-      <div className="flex gap-2">
+      {/* Desktop-only extras row */}
+      <div className="hidden sm:flex flex-wrap gap-2">
+        {currentInningsNum === 2 && targetRuns && (
+          <DLSCalculator
+            targetRuns={targetRuns}
+            oversCompleted={currentInningsData ? currentInningsData.currentOver + currentInningsData.currentBall / 6 : 0}
+            totalOvers={totalOvers}
+            wicketsLost={currentInningsData?.totalWickets || 0}
+            runsScored={currentInningsData?.totalRuns || 0}
+            onApply={(revisedTarget) => {
+              console.log("DLS target applied:", revisedTarget);
+            }}
+          />
+        )}
+        {currentInningsNum === "super_over" && (
+          <Button
+            onClick={() => resetInnings("super_over")}
+            variant="outline"
+            size="sm"
+          >
+            <Zap className="h-4 w-4 mr-1" />
+            Super Over
+          </Button>
+        )}
+      </div>
+
+      {/* Innings Selector — scrollable chips on mobile */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
         <Button
           onClick={() => useScoringStore.setState({ currentInnings: 1 })}
           variant={currentInningsNum === 1 ? "default" : "outline"}
           size="sm"
+          className="touch-manipulation shrink-0"
         >
-          Innings 1{matchData && ` (${matchData.teamA.name})`}
+          Inn 1{matchData ? ` · ${matchData.teamA.name.slice(0, 8)}` : ""}
         </Button>
         <Button
           onClick={() => useScoringStore.setState({ currentInnings: 2 })}
           variant={currentInningsNum === 2 ? "default" : "outline"}
           size="sm"
+          className="touch-manipulation shrink-0"
         >
-          Innings 2{matchData && ` (${matchData.teamB.name})`}
+          Inn 2{matchData ? ` · ${matchData.teamB.name.slice(0, 8)}` : ""}
         </Button>
         <Button
           onClick={() => useScoringStore.setState({ currentInnings: "super_over" })}
           variant={currentInningsNum === "super_over" ? "default" : "outline"}
           size="sm"
+          className="touch-manipulation shrink-0"
         >
-          Super Over
+          Super
         </Button>
       </div>
 
-      {/* Live Scorecard */}
-      <LiveScorecard targetRuns={targetRuns} totalOvers={totalOvers} />
+      {/* Full scorecard on desktop only (mobile uses compact sticky) */}
+      <div className="hidden sm:block">
+        <LiveScorecard targetRuns={targetRuns} totalOvers={totalOvers} />
+      </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b" role="tablist" aria-label="Scoring views">
+      {/* Tabs — Scorecard = ball pad; Charts secondary */}
+      <div className="flex gap-1 border-b" role="tablist" aria-label="Scoring views">
         <button
+          type="button"
           role="tab"
           aria-selected={activeTab === "scorecard"}
           onClick={() => setActiveTab("scorecard")}
-          className={`px-4 py-2 font-medium ${
+          className={`flex-1 sm:flex-none px-4 py-3 sm:py-2 text-sm font-medium touch-manipulation ${
             activeTab === "scorecard"
               ? "border-b-2 border-primary text-primary"
               : "text-muted-foreground"
           }`}
         >
-          Scorecard
+          Score
         </button>
         <button
+          type="button"
           role="tab"
           aria-selected={activeTab === "charts"}
           onClick={() => setActiveTab("charts")}
-          className={`px-4 py-2 font-medium ${
+          className={`flex-1 sm:flex-none px-4 py-3 sm:py-2 text-sm font-medium touch-manipulation ${
             activeTab === "charts"
               ? "border-b-2 border-primary text-primary"
               : "text-muted-foreground"
@@ -551,13 +577,55 @@ function ScoringInterface() {
         </button>
       </div>
 
-      {/* Content */}
       {activeTab === "scorecard" ? (
-        <div className="space-y-4">
-          {/* Player Selection */}
+        <div className="space-y-3 sm:space-y-4">
+          {/* Ball pad first — thumb zone */}
+          <Card className="p-3 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h2 className="text-base sm:text-lg font-semibold">Ball Input</h2>
+              {currentInningsData && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  Over {currentInningsData.currentOver}.{currentInningsData.currentBall}
+                </span>
+              )}
+            </div>
+            <BallInputComponent
+              batsmanId={selectedBatsman}
+              bowlerId={selectedBowler}
+              onBallAdded={persistBallToDB}
+            />
+          </Card>
+
+          {currentInningsData && (
+            <div className="flex gap-2 flex-wrap px-0.5">
+              {currentInningsData.balls
+                .filter((b) => b.overNumber === currentInningsData.currentOver)
+                .map((ball) => (
+                  <div
+                    key={ball.id}
+                    className={`min-w-9 min-h-9 flex items-center justify-center px-2 rounded-md text-sm font-medium ${
+                      ball.isWicket
+                        ? "bg-red-500 text-white"
+                        : ball.isFour
+                        ? "bg-orange-500 text-white"
+                        : ball.isSix
+                        ? "bg-red-600 text-white"
+                        : "bg-muted"
+                    }`}
+                  >
+                    {ball.isWicket ? "W" : ball.runs}
+                    {ball.isWide && "WD"}
+                    {ball.isNoBall && "NB"}
+                    {ball.isBye && "B"}
+                    {ball.isLegBye && "LB"}
+                  </div>
+                ))}
+            </div>
+          )}
+
           {currentTeamId && playersData && (
-            <Card className="p-4 sm:p-6">
-              <h2 className="text-lg font-semibold mb-4">Player Selection</h2>
+            <Card className="p-3 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Players</h2>
               <PlayerSelector
                 matchId={matchId}
                 teamId={currentTeamId}
@@ -570,50 +638,11 @@ function ScoringInterface() {
               />
             </Card>
           )}
-          <Card className="p-4 sm:p-6">
-            <h2 className="text-lg font-semibold mb-4">Ball-by-Ball Input</h2>
-            <BallInputComponent
-              batsmanId={selectedBatsman}
-              bowlerId={selectedBowler}
-              onBallAdded={persistBallToDB}
-            />
-          </Card>
 
-          <Card className="p-4 sm:p-6">
+          <Card className="p-3 sm:p-6 hidden sm:block">
             <h2 className="text-lg font-semibold mb-4">Voice Input</h2>
             <VoiceInput onCommand={handleVoiceCommand} />
           </Card>
-
-          {/* Current Over */}
-          {currentInningsData && (
-            <Card className="p-4 sm:p-6">
-              <h3 className="text-lg font-semibold mb-4">Current Over</h3>
-              <div className="flex gap-2 flex-wrap">
-                {currentInningsData.balls
-                  .filter((b) => b.overNumber === currentInningsData.currentOver)
-                  .map((ball) => (
-                    <div
-                      key={ball.id}
-                      className={`px-3 py-2 rounded-md text-sm font-medium ${
-                        ball.isWicket
-                          ? "bg-red-500 text-white"
-                          : ball.isFour
-                          ? "bg-orange-500 text-white"
-                          : ball.isSix
-                          ? "bg-red-600 text-white"
-                          : "bg-muted"
-                      }`}
-                    >
-                      {ball.runs}
-                      {ball.isWide && "WD"}
-                      {ball.isNoBall && "NB"}
-                      {ball.isBye && "B"}
-                      {ball.isLegBye && "LB"}
-                    </div>
-                  ))}
-              </div>
-            </Card>
-          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

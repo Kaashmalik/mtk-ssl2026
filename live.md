@@ -479,6 +479,7 @@ sleep 30
 
 # 4. Run migrations (if not already done via Supabase)
 pnpm --filter @mtk/database migrate
+# SSL Supabase (anxstufkbqnjkxgksfkn): 024_revoke_sensitive_table_grants.sql applied 2026-09-23
 
 # 5. Start all services
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
@@ -585,8 +586,13 @@ cp /etc/letsencrypt/live/api.ssl.mtkcodex.site/privkey.pem ~/mtk-ssl/nginx/ssl/k
 
 | Variable                              | Value                                    |
 |---------------------------------------|------------------------------------------|
+| `APP_ENV`                             | `production`                             |
 | `NEXT_PUBLIC_API_URL`                 | `https://api.ssl.mtkcodex.site`          |
 | `NEXT_PUBLIC_WS_URL`                  | `wss://ws.ssl.mtkcodex.site`             |
+| `SCORING_SERVICE_URL`                 | `https://api.ssl.mtkcodex.site` (or scoring URL) |
+| `SCORING_GATEWAY_TOKEN`               | same secret as Nest scoring-service      |
+| `NEXT_PUBLIC_SCORING_WS_TOKEN`        | same as `SCORING_GATEWAY_TOKEN`          |
+| `ONLINE_PAYMENTS_ENABLED`             | `false` (manual proofs until online live)|
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`   | `pk_live_...`                            |
 | `CLERK_SECRET_KEY`                    | `sk_live_...`                            |
 | `NEXT_PUBLIC_SUPABASE_URL`            | `https://xxx.supabase.co`                |

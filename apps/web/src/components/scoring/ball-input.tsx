@@ -77,14 +77,14 @@ export function BallInputComponent({ batsmanId, bowlerId, onBallAdded }: BallInp
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-3">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 sm:gap-3">
         {BALL_OPTIONS.map((option) => (
           <Button
             key={option.value}
             onClick={() => handleBallClick(option.value)}
-            aria-label={`Record ${option.label} run${option.value === "W" ? "s" : typeof option.value === "number" && option.value !== 1 ? "s" : ""}`}
-            className={`${option.color} text-white text-lg sm:text-xl font-bold py-4 sm:py-6 touch-manipulation active:scale-95 transition-all`}
+            aria-label={`Record ${option.label}`}
+            className={`${option.color} text-white text-xl sm:text-xl font-bold min-h-14 sm:min-h-0 py-5 sm:py-6 touch-manipulation active:scale-95 transition-all rounded-xl`}
             size="lg"
           >
             {option.label}
