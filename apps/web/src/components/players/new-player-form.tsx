@@ -12,34 +12,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Save, Loader2 } from "lucide-react"
-import { updatePlayer } from "@/app/actions/players"
-import type { Player } from "@mtk/database"
+import { createPlayer } from "@/app/actions/players"
 
-interface EditPlayerFormProps {
-  player: Player
-  teams: { id: string; name: string }[]
+interface TeamOption {
+  id: string
+  name: string
 }
 
-export function EditPlayerForm({ player, teams }: EditPlayerFormProps) {
+export function NewPlayerForm({ teams = [] }: { teams?: TeamOption[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    name: player.name ?? "",
-    email: player.email ?? "",
-    phone: player.phone ?? "",
-    dateOfBirth: player.dateOfBirth ?? "",
-    nationality: player.nationality ?? "",
-    city: player.city ?? "",
-    role: player.role ?? "",
-    battingStyle: player.battingStyle ?? "",
-    bowlingStyle: player.bowlingStyle ?? "",
-    jerseyNumber: player.jerseyNumber?.toString() ?? "",
-    heightCm: player.heightCm?.toString() ?? "",
-    weightKg: player.weightKg?.toString() ?? "",
-    biography: player.biography ?? "",
-    teamId: player.teamId ?? "",
-    status: player.status ?? "active",
+    name: "", email: "", phone: "", dateOfBirth: "",
+    nationality: "", city: "",
+    role: "", battingStyle: "", bowlingStyle: "",
+    jerseyNumber: "", heightCm: "", weightKg: "",
+    biography: "",
+    teamId: "",
+    status: "active",
   })
 
   const updateField = (key: string, value: string) => {
@@ -52,7 +43,7 @@ export function EditPlayerForm({ player, teams }: EditPlayerFormProps) {
 
     startTransition(async () => {
       try {
-        await updatePlayer(player.id, {
+        await createPlayer({
           name: formData.name.trim(),
           email: formData.email.trim() || null,
           phone: formData.phone.trim() || null,
@@ -74,10 +65,10 @@ export function EditPlayerForm({ player, teams }: EditPlayerFormProps) {
           status: (formData.status || "active") as
             | "active" | "injured" | "retired" | "suspended" | "inactive",
         })
-        toast.success("Player updated successfully!")
-        router.push(`/dashboard/players/${player.id}`)
+        toast.success("Player registered successfully!")
+        router.push("/dashboard/players")
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to update player"
+        const message = err instanceof Error ? err.message : "Failed to register player"
         setError(message)
         toast.error(message)
       }
@@ -86,19 +77,21 @@ export function EditPlayerForm({ player, teams }: EditPlayerFormProps) {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
+      {/* Header */}
       <MotionWrapper variant="fadeInLeft">
         <div className="flex items-center gap-4">
-          <Link href={`/dashboard/players/${player.id}`}>
+          <Link href="/dashboard/players">
             <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Edit Player</h1>
-            <p className="text-muted-foreground mt-1">Update details for {player.name}.</p>
+            <h1 className="text-3xl font-bold tracking-tight">Register Player</h1>
+            <p className="text-muted-foreground mt-1">Add a new player to your league database.</p>
           </div>
         </div>
       </MotionWrapper>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Personal Information */}
         <MotionWrapper variant="fadeInUp" delay={0.1}>
           <Card>
             <CardHeader><CardTitle className="text-lg">Personal Information</CardTitle></CardHeader>
@@ -131,6 +124,7 @@ export function EditPlayerForm({ player, teams }: EditPlayerFormProps) {
           </Card>
         </MotionWrapper>
 
+        {/* Cricket Details */}
         <MotionWrapper variant="fadeInUp" delay={0.2}>
           <Card>
             <CardHeader><CardTitle className="text-lg">Cricket Details</CardTitle></CardHeader>
@@ -223,11 +217,12 @@ export function EditPlayerForm({ player, teams }: EditPlayerFormProps) {
           </div>
         )}
 
+        {/* Actions */}
         <MotionWrapper variant="fadeInUp" delay={0.3}>
           <div className="flex items-center justify-end gap-3">
-            <Link href={`/dashboard/players/${player.id}`}><Button variant="outline" type="button">Cancel</Button></Link>
+            <Link href="/dashboard/players"><Button variant="outline" type="button">Cancel</Button></Link>
             <Button type="submit" variant="gradient-shine" disabled={isPending || !formData.name.trim()}>
-              {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : <><Save className="h-4 w-4 mr-2" />Save Changes</>}
+              {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : <><Save className="h-4 w-4 mr-2" />Register Player</>}
             </Button>
           </div>
         </MotionWrapper>

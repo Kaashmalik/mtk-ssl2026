@@ -6,9 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@mtk/ui/components/ui/
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Edit, MapPin } from "lucide-react"
 import { getTeamWithRoster, deleteTeam } from "@/app/actions/teams"
+import { getPlayers } from "@/app/actions/players"
 import { DeleteButton } from "@/components/shared/delete-button"
 import { isFollowing, getFollowerCount } from "@/app/actions/follows"
 import { FollowButton } from "@/components/shared/follow-button"
+import { TeamRosterManager } from "@/components/teams/team-roster-manager"
 import { db, matches, teams, matchInnings } from "@mtk/database"
 import { eq, and, or, desc } from "drizzle-orm"
 import { notFound } from "next/navigation"
@@ -33,6 +35,27 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
 
   const followingState = await isFollowing("team", id)
   const followersCount = await getFollowerCount("team", id)
+
+  let availablePlayers: { id: string; name: string; teamId: string | null }[] = []
+  try {
+    const playersResult = await getPlayers({
+      page: 1,
+      pageSize: 200,
+      sortBy: "name",
+      sortOrder: "asc",
+    })
+    availablePlayers = playersResult.data.map((p) => ({
+      id: p.id,
+      name: p.name,
+      teamId: p.teamId ?? null,
+    }))
+  } catch {
+    availablePlayers = team.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      teamId: id,
+    }))
+  }
 
   // Fetch all matches involving this team
   const teamMatches = await db.select().from(matches)
@@ -188,7 +211,12 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
             <TabsTrigger value="matches">Matches ({resolvedMatches.length})</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="squad">
+          <TabsContent value="squad" className="space-y-4">
+            <TeamRosterManager
+              teamId={id}
+              roster={team.players.map((p) => ({ id: p.id, name: p.name, teamId: id }))}
+              availablePlayers={availablePlayers}
+            />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {team.players.map((p) => (
                 <Link key={p.id} href={`/dashboard/players/${p.id}`}>

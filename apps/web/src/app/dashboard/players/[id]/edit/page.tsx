@@ -1,11 +1,8 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { getPlayer } from "@/app/actions/players"
+import { getTeams } from "@/app/actions/teams"
 import { EditPlayerForm } from "@/components/players/edit-player-form"
 
-/**
- * Edit an existing player. Server component — loads the player (tenant-scoped
- * via the action) and seeds the client form.
- */
 export default async function EditPlayerPage({
   params,
 }: {
@@ -15,5 +12,19 @@ export default async function EditPlayerPage({
   const player = await getPlayer(id)
   if (!player) notFound()
 
-  return <EditPlayerForm player={player} />
+  let teams: { id: string; name: string }[] = []
+  try {
+    const result = await getTeams({
+      page: 1,
+      pageSize: 100,
+      isActive: true,
+      sortBy: "name",
+      sortOrder: "asc",
+    })
+    teams = result.data.map((t) => ({ id: t.id, name: t.name }))
+  } catch {
+    redirect("/dashboard/league/setup")
+  }
+
+  return <EditPlayerForm player={player} teams={teams} />
 }
