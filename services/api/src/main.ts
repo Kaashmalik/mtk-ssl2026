@@ -20,8 +20,12 @@ import express from "express";
  */
 Sentry.init({
   dsn: env.SENTRY_DSN,
-  environment: env.NODE_ENV,
-  tracesSampleRate: env.NODE_ENV === "production" ? 0.1 : 1.0,
+  environment:
+    process.env.SENTRY_ENVIRONMENT ||
+    process.env.APP_ENV ||
+    env.NODE_ENV,
+  tracesSampleRate:
+    (process.env.APP_ENV || env.NODE_ENV) === "production" ? 0.1 : 1.0,
 });
 
 async function bootstrap() {

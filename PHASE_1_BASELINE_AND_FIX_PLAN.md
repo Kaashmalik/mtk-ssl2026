@@ -96,5 +96,4 @@ Compile succeeds; prerender of `/dashboard/matches` throws:
 
 ## Recommended next action
 
-**Approve Wave A** to begin implementation (one concern per commit).  
-Wave B (scoring proxy) is the highest-leverage functional work after builds are green.
+Wave A–D complete on `main`. Next: **Wave E** (design tokens, empty/error states, mobile scoring, CI gates, DNS go-live).

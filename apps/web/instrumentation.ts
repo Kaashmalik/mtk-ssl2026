@@ -41,7 +41,11 @@ export async function register(): Promise<void> {
   const sentryOptions = {
     dsn,
     tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
-    environment: process.env.NODE_ENV,
+    // Prefer explicit staging/prod split over raw NODE_ENV.
+    environment:
+      process.env.SENTRY_ENVIRONMENT ||
+      process.env.APP_ENV ||
+      process.env.NODE_ENV,
     release: process.env.SENTRY_RELEASE || undefined,
   };
 

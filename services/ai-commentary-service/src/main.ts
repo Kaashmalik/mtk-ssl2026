@@ -1,3 +1,4 @@
+import './instrument';
 import './env';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';

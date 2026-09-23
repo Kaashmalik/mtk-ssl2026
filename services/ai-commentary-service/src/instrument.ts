@@ -13,11 +13,18 @@ const environment =
 
 const isProdLike = environment === 'production' || environment === 'staging';
 
-Sentry.init({
-  dsn,
-  environment,
-  release: process.env.SENTRY_RELEASE || undefined,
-  tracesSampleRate: Number(
-    process.env.SENTRY_TRACES_SAMPLE_RATE ?? (isProdLike ? 0.1 : 1.0),
-  ),
-});
+if (dsn) {
+  Sentry.init({
+    dsn,
+    environment,
+    release: process.env.SENTRY_RELEASE || undefined,
+    tracesSampleRate: Number(
+      process.env.SENTRY_TRACES_SAMPLE_RATE ?? (isProdLike ? 0.1 : 1.0),
+    ),
+  });
+} else if (isProdLike) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[instrument] SENTRY_DSN unset — error monitoring disabled (env=${environment})`,
+  );
+}
