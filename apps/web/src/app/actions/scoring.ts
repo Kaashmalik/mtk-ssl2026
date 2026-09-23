@@ -5,12 +5,15 @@ import { revalidatePath } from "next/cache"
 import { db } from "@mtk/database"
 import {
   matches, matchInnings, matchBalls, players, teams,
-  type NewMatchBall,
 } from "@mtk/database"
-import { eq, and, desc, asc, sql } from "drizzle-orm"
+import { eq, and, desc, asc } from "drizzle-orm"
 import { z } from "zod"
 import { getMyTenant } from "@/app/actions/tenants"
 import { withAuth } from "./action-guard"
+import {
+  proxyRecordBall,
+  proxyUndoBall,
+} from "@/lib/scoring-service-client"
 
 // ─── Schemas ──────────────────────────────────────────────────
 
@@ -51,7 +54,7 @@ async function requireTenant() {
 }
 
 // ─── Record Ball ──────────────────────────────────────────────
-// Atomic: inserts ball, updates innings aggregates, transitions match status.
+// Auth + tenant checks here; persistence is Nest scoring-service (SoT).
 
 export const recordBall = withAuth("match:score", async (input: RecordBallInput) => {
   const { userId } = await auth()
@@ -59,220 +62,88 @@ export const recordBall = withAuth("match:score", async (input: RecordBallInput)
   const tenant = await requireTenant()
   const validated = recordBallSchema.parse(input)
 
-  return await db.transaction(async (tx) => {
-    // 1. Verify match belongs to tenant and is scorable
-    const [match] = await tx.select().from(matches)
-      .where(and(eq(matches.id, validated.matchId), eq(matches.tenantId, tenant.id)))
-      .limit(1)
+  if (!validated.batsmanId || !validated.bowlerId) {
+    throw new Error("Batsman and bowler are required")
+  }
 
-    if (!match) throw new Error("Match not found")
-    if (match.status === "completed" || match.status === "abandoned" || match.status === "cancelled") {
-      throw new Error(`Match is already ${match.status}`)
-    }
+  // Verify match belongs to tenant and is scorable
+  const [match] = await db.select().from(matches)
+    .where(and(eq(matches.id, validated.matchId), eq(matches.tenantId, tenant.id)))
+    .limit(1)
 
-    // 2. Verify innings exists
-    const [innings] = await tx.select().from(matchInnings)
-      .where(and(eq(matchInnings.id, validated.inningsId), eq(matchInnings.matchId, validated.matchId)))
-      .limit(1)
+  if (!match) throw new Error("Match not found")
+  if (match.status === "completed" || match.status === "abandoned" || match.status === "cancelled") {
+    throw new Error(`Match is already ${match.status}`)
+  }
 
-    if (!innings) throw new Error("Innings not found")
-    if (innings.status === "completed") throw new Error("Innings is already completed")
+  const [innings] = await db.select().from(matchInnings)
+    .where(and(eq(matchInnings.id, validated.inningsId), eq(matchInnings.matchId, validated.matchId)))
+    .limit(1)
 
-    // 3. Determine ball properties
-    const isWide = validated.isWide
-    const isNoBall = validated.isNoBall
-    const isBye = validated.isBye
-    const isLegBye = validated.isLegBye
-    const isWicket = validated.isWicket
-    const totalRuns = validated.runs
-    const isFour = validated.isFour || (totalRuns === 4 && !isWide && !isNoBall && !isBye && !isLegBye)
-    const isSix = validated.isSix || (totalRuns === 6 && !isWide && !isNoBall && !isBye && !isLegBye)
+  if (!innings) throw new Error("Innings not found")
+  if (innings.status === "completed") throw new Error("Innings is already completed")
 
-    // 4. Insert the ball record
-    const ballInsert: NewMatchBall = {
-      tenantId: tenant.id,
+  let extras: { type: "wide" | "noball" | "bye" | "legbye"; runs: number } | undefined
+  if (validated.isWide) extras = { type: "wide", runs: Math.max(1, validated.runs) }
+  else if (validated.isNoBall) extras = { type: "noball", runs: Math.max(1, validated.runs) }
+  else if (validated.isBye) extras = { type: "bye", runs: validated.runs }
+  else if (validated.isLegBye) extras = { type: "legbye", runs: validated.runs }
+
+  const wicket = validated.isWicket && validated.wicketType
+    ? { type: validated.wicketType, playerId: validated.batsmanId }
+    : undefined
+
+  const result = await proxyRecordBall({
+    matchId: validated.matchId,
+    inningsId: validated.inningsId,
+    over: validated.overNumber,
+    ball: validated.ballNumber,
+    runs: validated.runs,
+    batsmanId: validated.batsmanId,
+    bowlerId: validated.bowlerId,
+    extras,
+    wicket,
+  })
+
+  revalidatePath(`/matches/${validated.matchId}/scoring`)
+  revalidatePath(`/dashboard/matches/${validated.matchId}`)
+  revalidatePath("/dashboard/scoring")
+
+  return {
+    success: true,
+    ballId: result.ballId,
+    scorecard: {
       matchId: validated.matchId,
       inningsId: validated.inningsId,
-      overNumber: validated.overNumber,
-      ballNumber: validated.ballNumber,
-      bowlerId: validated.bowlerId || null,
-      batsmanId: validated.batsmanId || null,
-      runs: validated.runs,
-      isWicket,
-      wicketType: isWicket ? (validated.wicketType as NewMatchBall["wicketType"]) : null,
-      isFour,
-      isSix,
-      isWide,
-      isNoBall,
-      isBye,
-      isLegBye,
-      shotDirection: null,
-      shotType: null,
-    }
-
-    const [insertedBall] = await tx.insert(matchBalls)
-      .values(ballInsert)
-      .returning()
-
-    // 5. Update innings aggregates incrementally (O(1))
-    const extrasRuns = (isWide || isNoBall) ? validated.runs : 0
-    const byesRuns = isBye ? validated.runs : 0
-    const legByesRuns = isLegBye ? validated.runs : 0
-
-    await tx.update(matchInnings)
-      .set({
-        totalRuns: sql`${matchInnings.totalRuns} + ${totalRuns}`,
-        totalWickets: sql`${matchInnings.totalWickets} + ${isWicket ? 1 : 0}`,
-        totalBalls: sql`${matchInnings.totalBalls} + ${(!isWide && !isNoBall) ? 1 : 0}`,
-        extras: sql`${matchInnings.extras} + ${extrasRuns}`,
-        byes: sql`${matchInnings.byes} + ${byesRuns}`,
-        legByes: sql`${matchInnings.legByes} + ${legByesRuns}`,
-        wides: sql`${matchInnings.wides} + ${isWide ? 1 : 0}`,
-        noBalls: sql`${matchInnings.noBalls} + ${isNoBall ? 1 : 0}`,
-        status: "in_progress",
-        updatedAt: new Date(),
-      })
-      .where(eq(matchInnings.id, validated.inningsId))
-
-    // 6. Auto-start match if still scheduled
-    if (match.status === "scheduled" || match.status === "toss") {
-      await tx.update(matches)
-        .set({ status: "live", startDate: new Date(), updatedAt: new Date() })
-        .where(eq(matches.id, validated.matchId))
-    }
-
-    // 7. Fetch updated innings for response
-    const [updatedInnings] = await tx.select().from(matchInnings)
-      .where(eq(matchInnings.id, validated.inningsId))
-      .limit(1)
-
-    if (!updatedInnings) throw new Error("Innings disappeared during transaction")
-
-    const totalBalls = updatedInnings.totalBalls
-    const overs = Math.floor(totalBalls / 6)
-    const ballsInOver = totalBalls % 6
-    const runRate = totalBalls > 0 ? Number((updatedInnings.totalRuns / (totalBalls / 6)).toFixed(2)) : 0
-
-    revalidatePath(`/matches/${validated.matchId}/scoring`)
-    revalidatePath(`/dashboard/matches/${validated.matchId}`)
-    revalidatePath("/dashboard/scoring")
-
-    return {
-      success: true,
-      ballId: insertedBall.id,
-      scorecard: {
-        matchId: validated.matchId,
-        inningsId: validated.inningsId,
-        innings: updatedInnings.inningsNumber,
-        totalRuns: updatedInnings.totalRuns,
-        totalWickets: updatedInnings.totalWickets,
-        overs,
-        balls: ballsInOver,
-        runRate,
-        extras: updatedInnings.extras,
-        wides: updatedInnings.wides,
-        noBalls: updatedInnings.noBalls,
-        byes: updatedInnings.byes,
-        legByes: updatedInnings.legByes,
-      },
-    }
-  })
+      innings: result.scorecard.innings,
+      totalRuns: result.scorecard.totalRuns,
+      totalWickets: result.scorecard.totalWickets,
+      overs: result.scorecard.overs,
+      balls: result.scorecard.balls,
+      runRate: result.scorecard.runRate,
+    },
+  }
 })
 
 // ─── Undo Ball ────────────────────────────────────────────────
-// Only the last recorded ball in an innings can be undone, within 5 minutes.
+// Auth here; undo rules enforced by scoring-service SoT.
 
 export const undoBall = withAuth("match:score", async (matchId: string, ballId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
+  const tenant = await requireTenant()
 
-  return await db.transaction(async (tx) => {
-    // 1. Find the ball
-    const [ball] = await tx.select().from(matchBalls)
-      .where(and(eq(matchBalls.id, ballId), eq(matchBalls.matchId, matchId)))
-      .limit(1)
+  const [match] = await db.select({ id: matches.id }).from(matches)
+    .where(and(eq(matches.id, matchId), eq(matches.tenantId, tenant.id)))
+    .limit(1)
+  if (!match) throw new Error("Match not found")
 
-    if (!ball) throw new Error("Ball not found")
+  await proxyUndoBall(matchId, ballId)
 
-    // 2. Verify it's the last ball
-    const [lastBall] = await tx.select({ id: matchBalls.id }).from(matchBalls)
-      .where(eq(matchBalls.inningsId, ball.inningsId))
-      .orderBy(desc(matchBalls.createdAt))
-      .limit(1)
+  revalidatePath(`/matches/${matchId}/scoring`)
+  revalidatePath(`/dashboard/matches/${matchId}`)
 
-    if (!lastBall || lastBall.id !== ballId) {
-      throw new Error("Only the last recorded ball can be undone")
-    }
-
-    // 3. Time window check (5 minutes)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
-    if (ball.createdAt < fiveMinutesAgo) {
-      throw new Error("Cannot undo a ball recorded more than 5 minutes ago")
-    }
-
-    // 4. Verify innings not completed
-    const [innings] = await tx.select().from(matchInnings)
-      .where(eq(matchInnings.id, ball.inningsId))
-      .limit(1)
-
-    if (!innings) throw new Error("Innings not found")
-    if (innings.status === "completed") throw new Error("Cannot undo balls in a completed innings")
-
-    // 5. Delete the ball
-    await tx.delete(matchBalls).where(eq(matchBalls.id, ballId))
-
-    // 6. Decrement innings aggregates
-    const totalRuns = ball.runs
-    const extrasRuns = (ball.isWide || ball.isNoBall) ? 1 : 0
-    const byesRuns = ball.isBye ? ball.runs : 0
-    const legByesRuns = ball.isLegBye ? ball.runs : 0
-
-    await tx.update(matchInnings)
-      .set({
-        totalRuns: sql`GREATEST(0, ${matchInnings.totalRuns} - ${totalRuns})`,
-        totalWickets: sql`GREATEST(0, ${matchInnings.totalWickets} - ${ball.isWicket ? 1 : 0})`,
-        totalBalls: sql`GREATEST(0, ${matchInnings.totalBalls} - ${(!ball.isWide && !ball.isNoBall) ? 1 : 0})`,
-        extras: sql`GREATEST(0, ${matchInnings.extras} - ${extrasRuns})`,
-        byes: sql`GREATEST(0, ${matchInnings.byes} - ${byesRuns})`,
-        legByes: sql`GREATEST(0, ${matchInnings.legByes} - ${legByesRuns})`,
-        wides: sql`GREATEST(0, ${matchInnings.wides} - ${ball.isWide ? 1 : 0})`,
-        noBalls: sql`GREATEST(0, ${matchInnings.noBalls} - ${ball.isNoBall ? 1 : 0})`,
-        updatedAt: new Date(),
-      })
-      .where(eq(matchInnings.id, ball.inningsId))
-
-    // 7. Fetch updated innings
-    const [updatedInnings] = await tx.select().from(matchInnings)
-      .where(eq(matchInnings.id, ball.inningsId))
-      .limit(1)
-
-    if (!updatedInnings) throw new Error("Innings disappeared during undo transaction")
-
-    const totalBalls = updatedInnings.totalBalls
-    const runRate = totalBalls > 0 ? Number((updatedInnings.totalRuns / (totalBalls / 6)).toFixed(2)) : 0
-
-    revalidatePath(`/matches/${matchId}/scoring`)
-    revalidatePath(`/dashboard/matches/${matchId}`)
-
-    return {
-      success: true,
-      scorecard: {
-        matchId,
-        inningsId: ball.inningsId,
-        innings: updatedInnings.inningsNumber,
-        totalRuns: updatedInnings.totalRuns,
-        totalWickets: updatedInnings.totalWickets,
-        overs: Math.floor(totalBalls / 6),
-        balls: totalBalls % 6,
-        runRate,
-        extras: updatedInnings.extras,
-        wides: updatedInnings.wides,
-        noBalls: updatedInnings.noBalls,
-        byes: updatedInnings.byes,
-        legByes: updatedInnings.legByes,
-      },
-    }
-  })
+  return { success: true }
 })
 
 // ─── Create Innings ───────────────────────────────────────────
