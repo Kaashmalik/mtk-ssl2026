@@ -11,8 +11,9 @@ function loadRootEnv() {
     files.push(".env.development", ".env.development.local");
   }
   const isPlaceholder = (val) =>
-    /your_|replace_with|placeholder|changeme|example\.com/i.test(val) ||
-    val.length < 20;
+    /your_|replace_with|placeholder|changeme|example\.com|get from|\[[^\]]+\]/i.test(
+      val,
+    ) || val.length < 20;
   for (const name of files) {
     const filePath = path.join(root, name);
     if (!fs.existsSync(filePath)) continue;

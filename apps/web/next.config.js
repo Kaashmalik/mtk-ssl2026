@@ -16,8 +16,9 @@ function loadRootEnv() {
   }
 
   const isPlaceholder = (val) =>
-    /your_|replace_with|placeholder|changeme|example\.com/i.test(val) ||
-    val.length < 20;
+    /your_|replace_with|placeholder|changeme|example\.com|get from|\[[^\]]+\]/i.test(
+      val,
+    ) || val.length < 20;
 
   for (const name of files) {
     const filePath = path.join(root, name);
@@ -62,8 +63,18 @@ const nextConfig = {
   },
   // Ensure client bundle receives public keys loaded from monorepo root
   env: {
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
-      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "",
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: (() => {
+      const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
+      if (
+        !key ||
+        /\[[^\]]+\]/.test(key) ||
+        /your_|get from|placeholder|replace_with/i.test(key) ||
+        key.length < 40
+      ) {
+        return "";
+      }
+      return key;
+    })(),
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000",
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000",
   },

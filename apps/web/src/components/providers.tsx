@@ -5,8 +5,20 @@ import { ThemeProvider } from "next-themes";
 import { LanguageProvider } from "@/hooks/use-language";
 import { PWARegister } from "@/components/pwa-register";
 
+/** Reject template/placeholder keys so builds never pass junk into Clerk. */
+function resolveClerkPublishableKey(): string | undefined {
+  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  if (!key) return undefined;
+  if (/\[[^\]]+\]/.test(key)) return undefined;
+  if (/your_|get from|placeholder|replace_with|changeme/i.test(key)) {
+    return undefined;
+  }
+  if (!/^pk_(test|live)_/.test(key) || key.length < 40) return undefined;
+  return key;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const publishableKey = resolveClerkPublishableKey();
 
   const themed = (
     <ThemeProvider
@@ -22,8 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     </ThemeProvider>
   );
 
-  // Build/CI without keys: skip Clerk wrapper so static generation can finish.
-  // Runtime must set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY (loaded from monorepo root via next.config).
+  // Build/CI without a real key: skip Clerk so static generation can finish.
   if (!publishableKey) {
     return themed;
   }

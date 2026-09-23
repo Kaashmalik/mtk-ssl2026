@@ -33,7 +33,27 @@ export function createSupabaseServerClient(url: string, serviceRoleKey: string) 
  * Drizzle ORM database client
  * For direct database access with type-safe queries
  */
-const connectionString = process.env.DATABASE_URL || "postgresql://ssl:ssl_dev_password@localhost:5432/ssl_dev";
+function resolveDatabaseUrl(): string {
+  const fallback = "postgresql://ssl:ssl_dev_password@localhost:5432/ssl_dev";
+  const raw = process.env.DATABASE_URL;
+  if (
+    !raw ||
+    /\[[A-Z0-9_]+\]/i.test(raw) ||
+    /your_|replace_with|placeholder|PROJECT_REF|PASSWORD/i.test(raw)
+  ) {
+    return fallback;
+  }
+  try {
+    // postgres.js / URL parser reject template connection strings
+    // eslint-disable-next-line no-new
+    new URL(raw);
+    return raw;
+  } catch {
+    return fallback;
+  }
+}
+
+const connectionString = resolveDatabaseUrl();
 
 // For query purposes (connection pooling with max 20 connections)
 export const queryClient = postgres(connectionString, {
