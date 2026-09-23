@@ -2,7 +2,7 @@
 
 import { auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
-import { db } from "@mtk/database"
+import { db, withTenantContext } from "@mtk/database"
 import { matches, teams, tournaments } from "@mtk/database"
 import { eq, and, desc, asc, count, or } from "drizzle-orm"
 import { z } from "zod"
@@ -57,32 +57,34 @@ export const createMatch = withAuth("match:create", async (input: CreateMatchInp
   if (tenantId !== tenant.id) throw new Error("Invalid tenant")
   if (validated.teamAId === validated.teamBId) throw new Error("A team cannot play against itself")
 
-  const [teamA] = await db.select().from(teams)
-    .where(and(eq(teams.id, validated.teamAId), eq(teams.tenantId, tenant.id)))
-    .limit(1)
-  const [teamB] = await db.select().from(teams)
-    .where(and(eq(teams.id, validated.teamBId), eq(teams.tenantId, tenant.id)))
-    .limit(1)
-  if (!teamA || !teamB) throw new Error("One or both teams not found")
-
-  if (validated.tournamentId) {
-    const [tournament] = await db.select().from(tournaments)
-      .where(and(eq(tournaments.id, validated.tournamentId), eq(tournaments.tenantId, tenant.id)))
+  return withTenantContext({ userId, tenantId }, async () => {
+    const [teamA] = await db.select().from(teams)
+      .where(and(eq(teams.id, validated.teamAId), eq(teams.tenantId, tenant.id)))
       .limit(1)
-    if (!tournament) throw new Error("Tournament not found")
-  }
-  
-  const [match] = await db.insert(matches).values({ 
-    ...validated,
-    tenantId,
-    scheduledDate: validated.scheduledDate ? new Date(validated.scheduledDate) : null,
-    status: "scheduled", 
-    createdBy: userId 
-  }).returning()
-  
-  revalidatePath("/dashboard/matches")
-  revalidatePath("/dashboard")
-  return { success: true, match }
+    const [teamB] = await db.select().from(teams)
+      .where(and(eq(teams.id, validated.teamBId), eq(teams.tenantId, tenant.id)))
+      .limit(1)
+    if (!teamA || !teamB) throw new Error("One or both teams not found")
+
+    if (validated.tournamentId) {
+      const [tournament] = await db.select().from(tournaments)
+        .where(and(eq(tournaments.id, validated.tournamentId), eq(tournaments.tenantId, tenant.id)))
+        .limit(1)
+      if (!tournament) throw new Error("Tournament not found")
+    }
+
+    const [match] = await db.insert(matches).values({
+      ...validated,
+      tenantId,
+      scheduledDate: validated.scheduledDate ? new Date(validated.scheduledDate) : null,
+      status: "scheduled",
+      createdBy: userId,
+    }).returning()
+
+    revalidatePath("/dashboard/matches")
+    revalidatePath("/dashboard")
+    return { success: true, match }
+  })
 })
 
 export const updateMatch = withAuth("match:update", async (id: string, input: Partial<CreateMatchInput>) => {
@@ -98,108 +100,124 @@ export const updateMatch = withAuth("match:update", async (id: string, input: Pa
     delete cleanData.tenantId;
   }
 
-  if (cleanData.teamAId || cleanData.teamBId) {
-    const teamIds = [cleanData.teamAId, cleanData.teamBId].filter(Boolean) as string[]
-    if (new Set(teamIds).size !== teamIds.length) throw new Error("A team cannot play against itself")
-    const teamsFound = await db.select().from(teams)
-      .where(and(eq(teams.tenantId, tenant.id), or(...teamIds.map((id) => eq(teams.id, id)))!))
-    if (teamsFound.length !== teamIds.length) throw new Error("One or more teams not found")
-  }
+  return withTenantContext({ userId, tenantId: tenant.id }, async () => {
+    if (cleanData.teamAId || cleanData.teamBId) {
+      const teamIds = [cleanData.teamAId, cleanData.teamBId].filter(Boolean) as string[]
+      if (new Set(teamIds).size !== teamIds.length) throw new Error("A team cannot play against itself")
+      const teamsFound = await db.select().from(teams)
+        .where(and(eq(teams.tenantId, tenant.id), or(...teamIds.map((tid) => eq(teams.id, tid)))!))
+      if (teamsFound.length !== teamIds.length) throw new Error("One or more teams not found")
+    }
 
-  if (cleanData.tournamentId) {
-    const [tournament] = await db.select().from(tournaments)
-      .where(and(eq(tournaments.id, cleanData.tournamentId as string), eq(tournaments.tenantId, tenant.id)))
-      .limit(1)
-    if (!tournament) throw new Error("Tournament not found")
-  }
-  if ("scheduledDate" in cleanData) {
-    const scheduledDate = cleanData.scheduledDate as string | null | undefined
-    cleanData.scheduledDate = scheduledDate ? new Date(scheduledDate) : null
-  }
-  const [match] = await db.update(matches).set({ ...cleanData, updatedAt: new Date() })
-    .where(and(eq(matches.id, id), eq(matches.tenantId, tenant.id)))
-    .returning()
-  if (!match) throw new Error("Match not found")
-  revalidatePath("/dashboard/matches")
-  revalidatePath(`/dashboard/matches/${id}`)
-  return { success: true, match }
+    if (cleanData.tournamentId) {
+      const [tournament] = await db.select().from(tournaments)
+        .where(and(eq(tournaments.id, cleanData.tournamentId as string), eq(tournaments.tenantId, tenant.id)))
+        .limit(1)
+      if (!tournament) throw new Error("Tournament not found")
+    }
+    if ("scheduledDate" in cleanData) {
+      const scheduledDate = cleanData.scheduledDate as string | null | undefined
+      cleanData.scheduledDate = scheduledDate ? new Date(scheduledDate) : null
+    }
+    const [match] = await db.update(matches).set({ ...cleanData, updatedAt: new Date() })
+      .where(and(eq(matches.id, id), eq(matches.tenantId, tenant.id)))
+      .returning()
+    if (!match) throw new Error("Match not found")
+    revalidatePath("/dashboard/matches")
+    revalidatePath(`/dashboard/matches/${id}`)
+    return { success: true, match }
+  })
 })
 
 export const deleteMatch = withAuth("match:delete", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  await db.delete(matches).where(and(eq(matches.id, id), eq(matches.tenantId, tenant.id)))
-  revalidatePath("/dashboard/matches")
-  revalidatePath("/dashboard")
-  return { success: true }
+  return withTenantContext({ userId, tenantId: tenant.id }, async () => {
+    await db.delete(matches).where(and(eq(matches.id, id), eq(matches.tenantId, tenant.id)))
+    revalidatePath("/dashboard/matches")
+    revalidatePath("/dashboard")
+    return { success: true }
+  })
 })
 
 export const getMatch = withAuth("match:read", async (id: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const [match] = await db.select().from(matches)
-    .where(and(eq(matches.id, id), eq(matches.tenantId, tenant.id)))
-    .limit(1)
-  return match ?? null
+  return withTenantContext({ userId, tenantId: tenant.id }, async () => {
+    const [match] = await db.select().from(matches)
+      .where(and(eq(matches.id, id), eq(matches.tenantId, tenant.id)))
+      .limit(1)
+    return match ?? null
+  })
 })
 
 export const getMatches = withAuth("match:read", async (filters: MatchFilters) => {
+  const { userId } = await auth()
+  if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const validated = matchFiltersSchema.parse({ ...filters, tenantId: tenant.id })
-  const { tournamentId, teamId, status, page, pageSize, sortBy, sortOrder } = validated
-  const offset = (page - 1) * pageSize
-  const conditions = [eq(matches.tenantId, tenant.id)]
-  if (tournamentId) conditions.push(eq(matches.tournamentId, tournamentId))
-  if (teamId) conditions.push(or(eq(matches.teamAId, teamId), eq(matches.teamBId, teamId))!)
-  if (status) conditions.push(eq(matches.status, status))
-  const whereClause = and(...conditions)
-  const orderFn = sortOrder === "desc" ? desc : asc
-  const orderColumn = sortBy === "scheduledDate" ? matches.scheduledDate : sortBy === "matchNumber" ? matches.matchNumber : matches.createdAt
-  const [data, [{ total }]] = await Promise.all([
-    db.select().from(matches).where(whereClause).orderBy(orderFn(orderColumn)).limit(pageSize).offset(offset),
-    db.select({ total: count() }).from(matches).where(whereClause),
-  ])
-  return { data, pagination: { page, pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / pageSize) } }
+  return withTenantContext({ userId, tenantId: tenant.id }, async () => {
+    const validated = matchFiltersSchema.parse({ ...filters, tenantId: tenant.id })
+    const { tournamentId, teamId, status, page, pageSize, sortBy, sortOrder } = validated
+    const offset = (page - 1) * pageSize
+    const conditions = [eq(matches.tenantId, tenant.id)]
+    if (tournamentId) conditions.push(eq(matches.tournamentId, tournamentId))
+    if (teamId) conditions.push(or(eq(matches.teamAId, teamId), eq(matches.teamBId, teamId))!)
+    if (status) conditions.push(eq(matches.status, status))
+    const whereClause = and(...conditions)
+    const orderFn = sortOrder === "desc" ? desc : asc
+    const orderColumn = sortBy === "scheduledDate" ? matches.scheduledDate : sortBy === "matchNumber" ? matches.matchNumber : matches.createdAt
+    const [data, [{ total }]] = await Promise.all([
+      db.select().from(matches).where(whereClause).orderBy(orderFn(orderColumn)).limit(pageSize).offset(offset),
+      db.select({ total: count() }).from(matches).where(whereClause),
+    ])
+    return { data, pagination: { page, pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / pageSize) } }
+  })
 })
 
 export const setTossResult = withAuth("match:score", async (matchId: string, tossWinnerId: string, tossDecision: "bat" | "bowl") => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const [match] = await db.update(matches)
-    .set({ tossWinnerId, tossDecision, status: "toss", updatedAt: new Date() })
-    .where(and(eq(matches.id, matchId), eq(matches.tenantId, tenant.id)))
-    .returning()
-  if (!match) throw new Error("Match not found")
-  revalidatePath(`/dashboard/matches/${matchId}`)
-  return { success: true, match }
+  return withTenantContext({ userId, tenantId: tenant.id }, async () => {
+    const [match] = await db.update(matches)
+      .set({ tossWinnerId, tossDecision, status: "toss", updatedAt: new Date() })
+      .where(and(eq(matches.id, matchId), eq(matches.tenantId, tenant.id)))
+      .returning()
+    if (!match) throw new Error("Match not found")
+    revalidatePath(`/dashboard/matches/${matchId}`)
+    return { success: true, match }
+  })
 })
 
 export const startMatch = withAuth("match:score", async (matchId: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const [match] = await db.update(matches)
-    .set({ status: "live", startDate: new Date(), updatedAt: new Date() })
-    .where(and(eq(matches.id, matchId), eq(matches.tenantId, tenant.id)))
-    .returning()
-  if (!match) throw new Error("Match not found")
-  revalidatePath(`/dashboard/matches/${matchId}`)
-  return { success: true, match }
+  return withTenantContext({ userId, tenantId: tenant.id }, async () => {
+    const [match] = await db.update(matches)
+      .set({ status: "live", startDate: new Date(), updatedAt: new Date() })
+      .where(and(eq(matches.id, matchId), eq(matches.tenantId, tenant.id)))
+      .returning()
+    if (!match) throw new Error("Match not found")
+    revalidatePath(`/dashboard/matches/${matchId}`)
+    return { success: true, match }
+  })
 })
 
 export const endMatch = withAuth("match:score", async (matchId: string, winnerId: string | null, result: string) => {
   const { userId } = await auth()
   if (!userId) throw new Error("Unauthorized")
   const tenant = await requireTenant()
-  const [match] = await db.update(matches)
-    .set({ status: "completed", winnerId, result, endDate: new Date(), updatedAt: new Date() })
-    .where(and(eq(matches.id, matchId), eq(matches.tenantId, tenant.id)))
-    .returning()
-  if (!match) throw new Error("Match not found")
-  revalidatePath(`/dashboard/matches/${matchId}`)
-  revalidatePath("/dashboard/matches")
-  return { success: true, match }
+  return withTenantContext({ userId, tenantId: tenant.id }, async () => {
+    const [match] = await db.update(matches)
+      .set({ status: "completed", winnerId, result, endDate: new Date(), updatedAt: new Date() })
+      .where(and(eq(matches.id, matchId), eq(matches.tenantId, tenant.id)))
+      .returning()
+    if (!match) throw new Error("Match not found")
+    revalidatePath(`/dashboard/matches/${matchId}`)
+    revalidatePath("/dashboard/matches")
+    return { success: true, match }
+  })
 })

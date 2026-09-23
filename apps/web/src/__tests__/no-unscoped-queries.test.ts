@@ -32,9 +32,8 @@ const ALLOWLIST = new Set([
   "tenants.ts",
   "users.ts",
   // TODO: migrate these to repos and remove from allowlist:
-  "matches.ts",
-  "teams.ts",
-  "players.ts",
+  "matches.ts", // withTenantContext + explicit tenantId filters; still direct db
+  "scoring.ts", // HTTP SoT for balls; remaining reads/createInnings use direct db
   "registrations.ts",
   "scorecards.ts",
   "follows.ts",
