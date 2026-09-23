@@ -9,8 +9,9 @@ import { getTournament, deleteTournament } from "@/app/actions/tournaments"
 import { DeleteButton } from "@/components/shared/delete-button"
 import { isFollowing, getFollowerCount } from "@/app/actions/follows"
 import { FollowButton } from "@/components/shared/follow-button"
-import { db, teams, matches, matchInnings } from "@mtk/database"
-import { eq, asc } from "drizzle-orm"
+import { RegistrationToggle } from "@/components/tournaments/registration-toggle"
+import { db, teams, matches, matchInnings, leagueRegistrations } from "@mtk/database"
+import { eq, asc, and } from "drizzle-orm"
 import { notFound } from "next/navigation"
 import { unstable_noStore as noStore } from "next/cache"
 
@@ -49,10 +50,36 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   const followingState = await isFollowing("tournament", id)
   const followersCount = await getFollowerCount("tournament", id)
 
-  // Fetch all registered teams
-  const registeredTeams = await db.select().from(teams)
-    .where(eq(teams.tournamentId, id))
+  // Approved registrations → teams (also include teams.tournamentId for legacy rows)
+  const approvedRegs = await db.select().from(leagueRegistrations)
+    .where(and(
+      eq(leagueRegistrations.tournamentId, id),
+      eq(leagueRegistrations.tenantId, tournament.tenantId),
+      eq(leagueRegistrations.status, "approved"),
+    ))
+
+  const registeredTeamIds = new Set<string>([
+    ...approvedRegs.map((r) => r.teamId),
+  ])
+
+  const legacyTeams = await db.select().from(teams)
+    .where(and(eq(teams.tournamentId, id), eq(teams.tenantId, tournament.tenantId)))
     .orderBy(asc(teams.name))
+
+  for (const t of legacyTeams) registeredTeamIds.add(t.id)
+
+  const registeredTeams = (
+    await Promise.all(
+      [...registeredTeamIds].map(async (teamId) => {
+        const [team] = await db.select().from(teams)
+          .where(and(eq(teams.id, teamId), eq(teams.tenantId, tournament.tenantId)))
+          .limit(1)
+        return team
+      }),
+    )
+  )
+    .filter(Boolean)
+    .sort((a, b) => a!.name.localeCompare(b!.name)) as typeof legacyTeams
 
   // Fetch all matches for the tournament
   const tournamentMatchesRaw = await db.select().from(matches)
@@ -207,6 +234,10 @@ export default async function TournamentDetailPage({ params }: { params: Promise
                     <Edit className="h-4 w-4 mr-1" />Edit
                   </Button>
                 </Link>
+                <RegistrationToggle
+                  tournamentId={id}
+                  registrationOpen={Boolean(tournament.registrationOpen)}
+                />
                 <DeleteButton
                   action={deleteTournament}
                   id={id}
