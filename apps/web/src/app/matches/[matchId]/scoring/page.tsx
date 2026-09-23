@@ -23,6 +23,7 @@ import {
   getMatchPlayersForScoring,
   type RecordBallInput,
 } from "@/app/actions/scoring";
+import { useScoringSocket } from "@/hooks/use-scoring-socket";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -114,6 +115,9 @@ function ScoringInterface() {
   const [selectedBowler, setSelectedBowler] = useState<string>();
 
   const totalOvers = matchData?.match.totalOvers ?? 20;
+
+  // Live updates from scoring-service WebSocket (reconnect + backoff)
+  useScoringSocket(matchId);
 
   const currentTeamId =
     currentInningsNum === 1 ? matchData?.match.teamAId :
