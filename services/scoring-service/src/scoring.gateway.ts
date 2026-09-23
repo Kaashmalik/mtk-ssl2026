@@ -213,7 +213,6 @@ export class ScoringGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
   private isAuthorized(client: Socket): boolean {
     const requiredToken = process.env.SCORING_GATEWAY_TOKEN;
-    if (!requiredToken) return true;
 
     const tokenFromAuth = client.handshake.auth?.token;
     const authHeader = client.handshake.headers?.authorization;
@@ -223,7 +222,12 @@ export class ScoringGateway implements OnGatewayConnection, OnGatewayDisconnect 
       : headerValue;
 
     const token = tokenFromAuth || tokenFromHeader;
-    if (typeof token !== 'string' || token.length === 0) return false;
+    if (typeof token !== 'string' || token.length === 0) {
+      // No token supplied: accept without auth only in development.
+      return process.env.NODE_ENV === 'development' && !requiredToken;
+    }
+    if (!requiredToken) return false;
+
     const a = Buffer.from(token);
     const b = Buffer.from(requiredToken);
     return a.length === b.length && timingSafeEqual(a, b);

@@ -3,6 +3,7 @@ import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ScoringModule } from './scoring.module';
+import { env } from './env';
 
 async function bootstrap() {
   // Create HTTP application
@@ -29,11 +30,12 @@ async function bootstrap() {
   });
 
   // Connect to Redis for pub/sub
+  const redisUrl = new URL(process.env.REDIS_URL || 'redis://localhost:6379');
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.REDIS,
     options: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
+      host: process.env.REDIS_HOST || redisUrl.hostname,
+      port: parseInt(process.env.REDIS_PORT || redisUrl.port || '6379'),
     },
   });
 
@@ -41,7 +43,7 @@ async function bootstrap() {
   await app.startAllMicroservices();
 
   // Start HTTP server
-  const port = process.env.PORT || 4000;
+  const port = env.PORT;
   await app.listen(port);
 
   console.log(`🏏 Scoring Service running on port ${port}`);

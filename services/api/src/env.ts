@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+const prodRequired = (name: string) =>
+  z
+    .string()
+    .min(1)
+    .optional()
+    .superRefine((value, ctx) => {
+      if ((process.env.NODE_ENV ?? "development") === "production" && !value) {
+        ctx.addIssue({ code: "custom", message: `${name} is required in production` });
+      }
+    });
+
 const defaultCorsOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
@@ -12,7 +23,7 @@ export const env = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
-    DATABASE_URL: z.string().optional(),
+    DATABASE_URL: prodRequired("DATABASE_URL"),
     REDIS_URL: z.string().optional(),
     KAFKA_BROKERS: z.string().optional(),
     CORS_ORIGINS: z.string().optional(),
@@ -24,7 +35,7 @@ export const env = z
     LOG_BODY: z.coerce.boolean().default(false),
     LOG_BODY_MAX_BYTES: z.coerce.number().int().min(256).max(1048576).default(8192),
     AUTH_REQUIRED: z.coerce.boolean().default(false),
-    API_AUTH_TOKEN: z.string().optional(),
+    API_AUTH_TOKEN: prodRequired("API_AUTH_TOKEN"),
     WS_LOG_PAYLOAD: z.coerce.boolean().default(false),
     WS_LOG_MAX_BYTES: z.coerce.number().int().min(256).max(1048576).default(4096),
     WS_MAX_PAYLOAD_BYTES: z.coerce.number().int().min(1024).max(10485760).default(1048576),

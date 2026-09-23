@@ -11,5 +11,16 @@ export const env = z.object({
   RTC_MIN_PORT: z.coerce.number().default(40000),
   RTC_MAX_PORT: z.coerce.number().default(49999),
   CORS_ORIGIN: z.string().default('http://localhost:3001'),
-  STREAMING_ACCESS_TOKEN: z.string().optional(),
+  STREAMING_ACCESS_TOKEN: z
+    .string()
+    .min(1)
+    .optional()
+    .superRefine((value, ctx) => {
+      if ((process.env.NODE_ENV ?? 'development') === 'production' && !value) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'STREAMING_ACCESS_TOKEN is required in production',
+        });
+      }
+    }),
 }).parse(process.env);

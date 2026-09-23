@@ -66,9 +66,10 @@ export class ScoringService {
   private readonly redis: Redis;
 
   constructor(private readonly kafkaPublisher: KafkaScoringPublisher) {
+    const redisUrl = new URL(env.REDIS_URL);
     this.redis = new Redis({
-      host: env.REDIS_HOST,
-      port: env.REDIS_PORT,
+      host: env.REDIS_HOST ?? redisUrl.hostname,
+      port: env.REDIS_PORT ?? Number(redisUrl.port || "6379"),
       maxRetriesPerRequest: null,
     });
   }
