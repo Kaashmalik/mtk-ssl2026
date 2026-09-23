@@ -40,6 +40,13 @@ jobs:
       - name: Run Unit Tests
         run: pnpm --filter @mtk/web test
 
+      - name: Build Web App
+        run: pnpm --filter @mtk/web build
+        env:
+          # Placeholder-safe: web build skips invalid Clerk keys
+          NEXT_TELEMETRY_DISABLED: "1"
+          SENTRY_UPLOAD: "0"
+
       - name: Run API Unit Tests
         run: pnpm --filter @mtk/api test
 

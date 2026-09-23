@@ -34,7 +34,7 @@ const ALLOWLIST = new Set([
   // TODO: migrate these to repos and remove from allowlist:
   "matches.ts", // withTenantContext + explicit tenantId filters; still direct db
   "scoring.ts", // HTTP SoT for balls; remaining reads/createInnings use direct db
-  "registrations.ts",
+  "registrations.ts", // withTenantContext + tenantId filters; still direct db
   "scorecards.ts",
   "follows.ts",
 ]);
