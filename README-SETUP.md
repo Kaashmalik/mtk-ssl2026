@@ -62,6 +62,34 @@ See `.env.example` for all required environment variables:
 - `pnpm type-check` - Type check all packages
 - `pnpm clean` - Clean all build artifacts
 
+## Building on Windows (turbo)
+
+`turbo` works normally on Windows. Two things to know:
+
+- A full monorepo build (`pnpm build`) legitimately takes several minutes
+  (10+ NestJS/webpack services and 3 `next build` apps). Run it with live
+  streaming output so progress is visible, and do not pipe it through tools
+  that buffer until completion (e.g. PowerShell's `Select-Object`), which
+  makes it look like it is stuck:
+
+  ```bash
+  pnpm exec turbo run build --output-logs=full --log-order=stream
+  pnpm exec turbo run build --output-logs=full --log-order=stream --concurrency=4
+  ```
+
+- For daily iteration on a single target use a filter instead of the full
+  build (each takes seconds, and the rest of the graph is cached):
+
+  ```bash
+  pnpm exec turbo run build --filter=@mtk/web
+  pnpm exec turbo run dev --filter=@mtk/web
+  pnpm exec turbo run lint --filter=scoring-service
+  ```
+
+  `--filter=@mtk/web` also builds its dependencies (@mtk/database, @mtk/ui,
+  @mtk/observability); `--filter=scoring-service` matches the workspace by
+  package name or directory suffix.
+
 ## Next Steps
 
 1. Set up Supabase project and get credentials
