@@ -44,6 +44,7 @@ export class CommentaryService {
   private matchContexts: Map<string, string[]> = new Map();
   private circuitBreakerState: 'closed' | 'open' | 'half-open' = 'closed';
   private circuitFailureCount = 0;
+  private halfOpenInFlight = false;
   private readonly circuitThreshold = 5;
   private readonly circuitTimeoutMs = 30000;
   private circuitResetTimer: NodeJS.Timeout | null = null;
@@ -114,10 +115,32 @@ export class CommentaryService {
     }
   }
 
+  /** Observable breaker status for health / ops (Wave D). */
+  getCircuitStatus(): {
+    state: 'closed' | 'open' | 'half-open';
+    failureCount: number;
+    threshold: number;
+  } {
+    return {
+      state: this.circuitBreakerState,
+      failureCount: this.circuitFailureCount,
+      threshold: this.circuitThreshold,
+    };
+  }
+
   private async callOpenaiWithCircuitBreaker(prompt: string, maxTokens = 80): Promise<string> {
     if (this.circuitBreakerState === 'open') {
       this.logger.warn('Circuit breaker OPEN - using fallback commentary');
       throw new Error('Circuit breaker open');
+    }
+
+    // Half-open: only one probe at a time so parallel language fan-out cannot
+    // re-trip the breaker with a burst of failures.
+    if (this.circuitBreakerState === 'half-open') {
+      if (this.halfOpenInFlight) {
+        throw new Error('Circuit breaker half-open probe in flight');
+      }
+      this.halfOpenInFlight = true;
     }
 
     try {
@@ -125,21 +148,30 @@ export class CommentaryService {
       this.circuitFailureCount = 0;
       if (this.circuitBreakerState === 'half-open') {
         this.circuitBreakerState = 'closed';
+        this.logger.log('Circuit breaker closed after successful half-open probe');
       }
       return result;
     } catch (error) {
       this.circuitFailureCount++;
-      if (this.circuitFailureCount >= this.circuitThreshold) {
+      if (
+        this.circuitBreakerState === 'half-open' ||
+        this.circuitFailureCount >= this.circuitThreshold
+      ) {
         this.circuitBreakerState = 'open';
         this.logger.error('Circuit breaker tripped - too many OpenAI failures');
         if (this.circuitResetTimer) clearTimeout(this.circuitResetTimer);
         this.circuitResetTimer = setTimeout(() => {
           this.circuitBreakerState = 'half-open';
           this.circuitFailureCount = 0;
+          this.halfOpenInFlight = false;
           this.logger.log('Circuit breaker moved to half-open');
         }, this.circuitTimeoutMs);
       }
       throw error;
+    } finally {
+      if (this.halfOpenInFlight && this.circuitBreakerState !== 'open') {
+        this.halfOpenInFlight = false;
+      }
     }
   }
 

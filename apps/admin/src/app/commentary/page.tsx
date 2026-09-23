@@ -5,7 +5,7 @@ import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
   title: "Commentary",
-  description: "Add and manage multilingual ball-by-ball commentary for SSL cricket matches. Includes AI-assisted commentary generation.",
+  description: "Add and manage multilingual ball-by-ball commentary for SSL cricket matches. AI-assisted generation is Beta.",
   path: "/commentary",
 });
 

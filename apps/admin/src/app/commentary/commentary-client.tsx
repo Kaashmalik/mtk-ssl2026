@@ -106,8 +106,16 @@ export function CommentaryClient() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Commentary System</h1>
-        <p className="text-muted-foreground mt-2">Manual and AI-powered multi-language commentary management.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">Commentary System</h1>
+          <Badge variant="outline" className="border-amber-500/60 text-amber-700 dark:text-amber-400">
+            AI Beta
+          </Badge>
+        </div>
+        <p className="text-muted-foreground mt-2">
+          Manual and AI-powered multi-language commentary. AI assist is beta — circuit-breaker
+          fallbacks keep scoring live if OpenAI is degraded.
+        </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -152,7 +160,13 @@ export function CommentaryClient() {
             </div>
 
             <div className="flex items-center justify-between py-2 border-t">
-              <div className="flex items-center gap-2"><Bot className="w-4 h-4" /><span className="text-sm font-medium">AI Assist</span></div>
+              <div className="flex items-center gap-2">
+                <Bot className="w-4 h-4" />
+                <span className="text-sm font-medium">AI Assist</span>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/60 text-amber-700">
+                  Beta
+                </Badge>
+              </div>
               <Button variant={aiAssistEnabled ? "default" : "outline"} size="sm" onClick={() => setAiAssistEnabled(!aiAssistEnabled)}>
                 {aiAssistEnabled ? "Enabled" : "Disabled"}
               </Button>
