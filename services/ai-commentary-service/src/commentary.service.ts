@@ -40,6 +40,7 @@ export class CommentaryService {
   private readonly logger = new Logger(CommentaryService.name);
   private producer: Producer;
   private redis: Redis | null = null;
+  private redisUnhealthy = false;
   private matchContexts: Map<string, string[]> = new Map();
   private circuitBreakerState: 'closed' | 'open' | 'half-open' = 'closed';
   private circuitFailureCount = 0;
@@ -60,9 +61,16 @@ export class CommentaryService {
       clientId: 'ai-commentary-producer',
       brokers: this.configService.get<string>('KAFKA_BROKERS', 'localhost:9092').split(','),
     });
-    
+
     this.producer = kafka.producer();
-    await this.producer.connect();
+    try {
+      await this.producer.connect();
+    } catch (err) {
+      // Do not crash the consumer on a down broker; publishes will retry/be logged.
+      this.logger.warn(
+        `Kafka producer connect failed (will retry on next publish): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   private initRedis() {
@@ -70,18 +78,25 @@ export class CommentaryService {
     if (redisUrl) {
       this.redis = new Redis(redisUrl, { maxRetriesPerRequest: 2 });
       this.redis.on('error', (err) => {
+        // Keep the client; ioredis reconnects. Mark unhealthy so operations
+        // short-circuit instead of hammering a down broker.
         this.logger.warn('Redis connection error, falling back to no-cache mode', err.message);
-        this.redis = null;
+        this.redisUnhealthy = true;
+      });
+      this.redis.on('ready', () => {
+        this.redisUnhealthy = false;
       });
     }
   }
 
   private getCacheKey(event: BallEvent, language: CommentaryLanguage): string {
-    return `commentary:${event.matchId}:${event.over}.${event.ball}:${language}`;
+    // Include tenant + innings so over 3.4 in innings 1 and over 3.4 in
+    // innings 2 (or another tenant's match) never collide.
+    return `commentary:${event.tenantId}:${event.matchId}:${event.inning}:${event.over}.${event.ball}:${language}`;
   }
 
   private async getCachedCommentary(event: BallEvent, language: CommentaryLanguage): Promise<string | null> {
-    if (!this.redis) return null;
+    if (!this.redis || this.redisUnhealthy) return null;
     try {
       const cached = await this.redis.get(this.getCacheKey(event, language));
       return cached;
@@ -91,7 +106,7 @@ export class CommentaryService {
   }
 
   private async setCachedCommentary(event: BallEvent, language: CommentaryLanguage, text: string, ttl = 3600): Promise<void> {
-    if (!this.redis) return;
+    if (!this.redis || this.redisUnhealthy) return;
     try {
       await this.redis.setex(this.getCacheKey(event, language), ttl, text);
     } catch (err) {
@@ -151,8 +166,8 @@ export class CommentaryService {
     }
 
     // Generate missing languages with circuit breaker
-    let generatedBy: Commentary['generatedBy'] = cachedLanguages.length > 0 ? 'cached' : 'fallback';
-    
+    let hasOpenaiGeneration = false;
+
     if (languagesToGenerate.length > 0 && this.circuitBreakerState !== 'open') {
       try {
         const prompts = languagesToGenerate.map((lang) => ({
@@ -171,8 +186,12 @@ export class CommentaryService {
         for (const result of results) {
           if (result.status === 'fulfilled') {
             commentaryTexts[result.value.lang] = result.value.text;
+            if (this.openaiService.isMockEnabled) {
+              // Mock/dev output must not be cached (1h) or branded as OpenAI.
+              continue;
+            }
+            hasOpenaiGeneration = true;
             await this.setCachedCommentary(event, result.value.lang, result.value.text);
-            generatedBy = 'openai';
           }
         }
       } catch (error) {
@@ -186,6 +205,12 @@ export class CommentaryService {
         commentaryTexts[lang] = this.getFallbackCommentary(event, lang);
       }
     }
+
+    const generatedBy: Commentary['generatedBy'] = hasOpenaiGeneration
+      ? 'openai'
+      : cachedLanguages.length > 0
+        ? 'cached'
+        : 'fallback';
 
     const commentary: Commentary = {
       matchId: event.matchId,
@@ -271,7 +296,11 @@ Tournament: ${data.tournamentName}
 
 Write 2-3 sentences to build excitement for this match.`;
 
-    return this.openaiService.generateText(prompt);
+    try {
+      return await this.callOpenaiWithCircuitBreaker(prompt, 120);
+    } catch {
+      return `Get ready for an exciting encounter between ${data.teamAName ?? 'Team A'} and ${data.teamBName ?? 'Team B'}. The Shakir Super League is back in action!`;
+    }
   }
 
   async generateMatchSummary(data: Record<string, unknown>): Promise<string> {
@@ -282,7 +311,11 @@ Player of the Match: ${data.motmName}
 
 Write 2-3 sentences summarizing this exciting match.`;
 
-    return this.openaiService.generateText(prompt);
+    try {
+      return await this.callOpenaiWithCircuitBreaker(prompt, 120);
+    } catch {
+      return `Match completed. ${data.result ?? 'A thrilling contest decided on the day.'}`;
+    }
   }
 
   private buildPrompt(event: BallEvent, context: string[], language: CommentaryLanguage): string {

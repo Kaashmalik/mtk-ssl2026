@@ -7,22 +7,37 @@ export class OpenAIService {
   private readonly logger = new Logger(OpenAIService.name);
   private client: OpenAI | null = null;
   private readonly model: string;
+  private readonly mockEnabled: boolean;
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('OPENAI_API_KEY');
     this.model = this.configService.get<string>('OPENAI_MODEL', 'gpt-4o');
+    this.mockEnabled = this.configService.get<string>('OPENAI_MOCK', '') === 'true';
 
     if (apiKey) {
       this.client = new OpenAI({ apiKey });
       this.logger.log(`OpenAI client initialized with model: ${this.model}`);
+    } else if (this.mockEnabled) {
+      this.logger.warn('OpenAI API key not configured - using mock responses (OPENAI_MOCK=true)');
     } else {
-      this.logger.warn('OpenAI API key not configured - using mock responses');
+      this.logger.warn('OpenAI API key not configured - generation will fail and fall back to templates');
     }
   }
 
+  get isMockEnabled(): boolean {
+    return this.mockEnabled;
+  }
+
+  /**
+   * Generate text from OpenAI. Real failures THROW — they must be observable
+   * by the downstream circuit breaker instead of being masked with mock text.
+   */
   async generateText(prompt: string, maxTokens = 100): Promise<string> {
     if (!this.client) {
-      return this.getMockResponse(prompt);
+      if (this.mockEnabled) {
+        return this.getMockResponse(prompt);
+      }
+      throw new Error('OpenAI API key not configured');
     }
 
     try {
@@ -45,7 +60,7 @@ export class OpenAIService {
       return response.choices[0]?.message?.content || 'What a moment in this match!';
     } catch (error) {
       this.logger.error('OpenAI API error', error);
-      return this.getMockResponse(prompt);
+      throw error;
     }
   }
 
@@ -55,7 +70,10 @@ export class OpenAIService {
     maxTokens = 150,
   ): Promise<string> {
     if (!this.client) {
-      return this.getMockResponse(messages[messages.length - 1]?.content || '');
+      if (this.mockEnabled) {
+        return this.getMockResponse(messages[messages.length - 1]?.content || '');
+      }
+      throw new Error('OpenAI API key not configured');
     }
 
     try {
@@ -72,7 +90,7 @@ export class OpenAIService {
       return response.choices[0]?.message?.content || '';
     } catch (error) {
       this.logger.error('OpenAI API error', error);
-      return this.getMockResponse('');
+      throw error;
     }
   }
 
