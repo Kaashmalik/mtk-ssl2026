@@ -30,6 +30,7 @@ export class StreamingGateway implements OnGatewayConnection, OnGatewayDisconnec
   private readonly logger = new Logger(StreamingGateway.name);
   private clients = new Map<string, ClientData>();
   private roomClients = new Map<string, Set<string>>();
+  private closeTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly mediasoup: MediasoupRouterService,
@@ -75,6 +76,11 @@ export class StreamingGateway implements OnGatewayConnection, OnGatewayDisconnec
       members.add(client.id);
       this.roomClients.set(roomId, members);
       this.streamingService.updateViewerCount(roomId, 1);
+
+      // A reconnect cancelled the pending room close, so make sure the room
+      // is still alive (createRoom is idempotent and returns the existing
+      // router; if the timer already fired and closed it, this recreates it).
+      this.cancelRoomClose(roomId);
 
       // Reset any previous room membership for this socket (defensive: a
       // socket may only ever be in one room in this gateway).
@@ -258,11 +264,34 @@ export class StreamingGateway implements OnGatewayConnection, OnGatewayDisconnec
     const members = this.roomClients.get(data.roomId);
     members?.delete(client.id);
     if (members && members.size === 0) {
-      this.roomClients.delete(data.roomId);
-      await this.mediasoup.closeRoom(data.roomId);
-      this.logger.log(`Room ${data.roomId} closed (last participant left)`);
+      // 3. debounce the room close so a brief disconnect/reconnect does not
+      //    tear down the whole room (e.g. the last participant's phone drops
+      //    for a few seconds mid-match).
+      this.scheduleRoomClose(data.roomId);
     }
 
     this.logger.log(`Client ${client.id} left room ${data.roomId}`);
+  }
+
+  private scheduleRoomClose(roomId: string): void {
+    if (this.closeTimers.has(roomId)) return;
+    const timer = setTimeout(() => {
+      this.closeTimers.delete(roomId);
+      const members = this.roomClients.get(roomId);
+      if (members && members.size > 0) return;
+      this.roomClients.delete(roomId);
+      this.mediasoup.closeRoom(roomId).then(() => {
+        this.logger.log(`Room ${roomId} closed after ${env.ROOM_CLOSE_GRACE_MS}ms grace`);
+      });
+    }, env.ROOM_CLOSE_GRACE_MS);
+    timer.unref();
+    this.closeTimers.set(roomId, timer);
+  }
+
+  private cancelRoomClose(roomId: string): void {
+    const timer = this.closeTimers.get(roomId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.closeTimers.delete(roomId);
   }
 }
