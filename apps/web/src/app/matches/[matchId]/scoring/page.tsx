@@ -327,7 +327,7 @@ function ScoringInterface() {
     // All retries failed
     console.error("Failed to persist ball to DB after retries:", lastError);
     setDbWriteFailed(true);
-    toast.error("Failed to save ball to database. Your local scoring is preserved — data will sync when connection is restored.", {
+    toast.error("Failed to save ball to the database after several attempts. Your scoring is kept on this device only and is NOT synced — please re-enter the ball once the connection is stable.", {
       duration: 6000,
     });
   }, [matchData]);
