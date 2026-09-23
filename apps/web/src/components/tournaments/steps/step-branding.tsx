@@ -1,5 +1,4 @@
 "use client"
-/* eslint-disable @next/next/no-img-element */
 
 import { UseFormReturn } from "react-hook-form"
 import { Card, CardContent, Input, Label } from "@mtk/ui"

@@ -93,7 +93,6 @@ export function BrandingSettings() {
 
   useEffect(() => {
     loadLeagues();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
