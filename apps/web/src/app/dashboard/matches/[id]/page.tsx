@@ -6,8 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@mtk/ui/components/ui/
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Trophy } from "lucide-react"
 import { getMatch, deleteMatch } from "@/app/actions/matches"
-import { getFullScorecard } from "@/app/actions/scorecards"
 import { DeleteButton } from "@/components/shared/delete-button"
+import { getFullScorecard } from "@/app/actions/scorecards"
 import { ShareButton } from "@/components/share/share-button"
 import { db, teams, matchInnings, players, venues } from "@mtk/database"
 import { eq, asc } from "drizzle-orm"
@@ -157,11 +157,27 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
   return (
     <div className="space-y-6">
       <MotionWrapper variant="fadeInLeft">
-        <Link href="/dashboard/matches">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />Back
-          </Button>
-        </Link>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <Link href="/dashboard/matches">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />Back
+            </Button>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Link href={`/dashboard/matches/${match.id}/edit`}>
+              <Button variant="outline" size="sm">
+                Edit Match
+              </Button>
+            </Link>
+            <DeleteButton
+              action={deleteMatch}
+              id={match.id}
+              redirectHref="/dashboard/matches"
+              entityLabel="match"
+              entityName={`${teamA.name} vs ${teamB.name}`}
+            />
+          </div>
+        </div>
       </MotionWrapper>
 
       {/* Match Header Hero */}

@@ -41,7 +41,7 @@ export function UsersManagement() {
       } else {
         setState({ phase: "error", message: data.error ?? "Impersonation failed" });
       }
-    } catch (error) {
+    } catch {
       setState({ phase: "error", message: "Network error — try again" });
     }
   }

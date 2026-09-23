@@ -1,4 +1,5 @@
 import tsParser from "@typescript-eslint/parser";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
 
 export default [
   {
@@ -13,8 +14,12 @@ export default [
         sourceType: "module",
       },
     },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
     rules: {
       "no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "warn",
     },
   },
 ];

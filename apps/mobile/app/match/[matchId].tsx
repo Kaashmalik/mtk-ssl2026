@@ -162,11 +162,11 @@ export default function MatchScreen() {
             </Text>
           </View>
         )}
-        {currentMatch.scheduledAt && (
+        {(currentMatch.scheduledDate || currentMatch.scheduled_date || currentMatch.scheduledAt) && (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Scheduled:</Text>
             <Text style={styles.infoValue}>
-              {new Date(currentMatch.scheduledAt).toLocaleString()}
+              {new Date(currentMatch.scheduledDate || currentMatch.scheduled_date || currentMatch.scheduledAt!).toLocaleString()}
             </Text>
           </View>
         )}
@@ -189,7 +189,7 @@ export default function MatchScreen() {
       </View>
 
       {/* Scoring Action (if live/upcoming) */}
-      {(currentMatch.status === "live" || currentMatch.status === "upcoming" || currentMatch.status === "scheduled" || currentMatch.status === "toss" || currentMatch.status === "innings_break") && (
+      {(currentMatch.status === "live" || currentMatch.status === "scheduled" || currentMatch.status === "toss" || currentMatch.status === "innings_break") && (
         <TouchableOpacity
           style={styles.scoreButton}
           onPress={() => router.push(`/scoring/${matchId}`)}

@@ -4,9 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/
 import { Badge } from "@mtk/ui/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@mtk/ui/components/ui/tabs"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
-import { ArrowLeft, Edit, Heart, MapPin } from "lucide-react"
+import { ArrowLeft, Edit, MapPin } from "lucide-react"
 import { getTeamWithRoster, deleteTeam } from "@/app/actions/teams"
 import { DeleteButton } from "@/components/shared/delete-button"
+import { isFollowing, getFollowerCount } from "@/app/actions/follows"
+import { FollowButton } from "@/components/shared/follow-button"
 import { db, matches, teams, matchInnings } from "@mtk/database"
 import { eq, and, or, desc } from "drizzle-orm"
 import { notFound } from "next/navigation"
@@ -28,6 +30,9 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
   if (!team) {
     notFound()
   }
+
+  const followingState = await isFollowing("team", id)
+  const followersCount = await getFollowerCount("team", id)
 
   // Fetch all matches involving this team
   const teamMatches = await db.select().from(matches)
@@ -120,9 +125,13 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
                 </div>
               </div>
               <div className="flex gap-2 shrink-0">
-                <Button variant="outline" size="sm" className="bg-white/10 text-white border-white/30 hover:bg-white/20">
-                  <Heart className="h-4 w-4 mr-1" />Follow
-                </Button>
+                <FollowButton
+                  tenantId={team.tenantId}
+                  followableType="team"
+                  followableId={id}
+                  initialIsFollowing={followingState}
+                  initialFollowerCount={followersCount}
+                />
                 <Link href={`/dashboard/teams/${id}/edit`}>
                   <Button variant="outline" size="sm">
                     <Edit className="h-4 w-4 mr-1" />Edit

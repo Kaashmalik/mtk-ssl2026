@@ -153,9 +153,9 @@ export default function MatchesScreen() {
               )}
             </View>
           </View>
-          {match.scheduledAt && match.status !== "live" && (
+          {(match.scheduledDate || match.scheduled_date || match.scheduledAt) && match.status !== "live" && (
             <Text style={styles.scheduledTime}>
-              {new Date(match.scheduledAt).toLocaleString()}
+              {new Date(match.scheduledDate || match.scheduled_date || match.scheduledAt!).toLocaleString()}
             </Text>
           )}
           {match.status === "completed" && match.winnerId && (

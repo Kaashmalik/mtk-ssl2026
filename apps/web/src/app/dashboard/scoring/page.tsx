@@ -11,6 +11,26 @@ import { db, matches, teams } from "@mtk/database"
 import { eq, and, or } from "drizzle-orm"
 import { unstable_noStore as noStore } from "next/cache"
 
+async function getTeamNameMap(teamIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  const uniqueIds = [...new Set(teamIds.filter(Boolean))]
+  if (uniqueIds.length === 0) return map
+
+  try {
+    const { inArray } = await import("drizzle-orm")
+    const rows = await db
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(inArray(teams.id, uniqueIds))
+    for (const row of rows) {
+      map.set(row.id, row.name)
+    }
+  } catch (error) {
+    console.error("Failed to batch-fetch team names:", error)
+  }
+  return map
+}
+
 export default async function ScoringConsolePage() {
   noStore()
 
@@ -45,18 +65,22 @@ export default async function ScoringConsolePage() {
     return dateA - dateB
   })
 
-  const resolvedMatches = await Promise.all(sortedMatches.map(async (m) => {
-    const [teamA] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, m.teamAId)).limit(1)
-    const [teamB] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, m.teamBId)).limit(1)
+  // Batch lookup all team names in a single query (fixes N+1)
+  const allTeamIds = sortedMatches.flatMap(m => [m.teamAId, m.teamBId])
+  const teamNames = await getTeamNameMap(allTeamIds)
+
+  const resolvedMatches = sortedMatches.map((m) => {
+    const teamAName = teamNames.get(m.teamAId) ?? "TBD Team A"
+    const teamBName = teamNames.get(m.teamBId) ?? "TBD Team B"
     return {
       ...m,
-      teamAName: teamA?.name ?? "TBD Team A",
-      teamBName: teamB?.name ?? "TBD Team B",
+      teamAName,
+      teamBName,
       formattedDate: m.scheduledDate 
         ? new Date(m.scheduledDate).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
         : "TBD"
     }
-  }))
+  })
 
   return (
     <div className="space-y-6">
@@ -80,7 +104,7 @@ export default async function ScoringConsolePage() {
                 )}
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <Badge variant="outline" className={`text-xs ${isLive ? "bg-red-500/10 text-red-500 border-red-500/20 animate-pulse" : "bg-primary/5 text-primary border-primary/20"}`}>
+                    <Badge variant="outline" role={isLive ? "status" : undefined} aria-live={isLive ? "polite" : undefined} className={`text-xs ${isLive ? "bg-red-500/10 text-red-500 border-red-500/20 animate-pulse" : "bg-primary/5 text-primary border-primary/20"}`}>
                       {isLive ? "LIVE SCORING" : "SCHEDULED"}
                     </Badge>
                     <span className="text-xs text-muted-foreground font-mono">{m.formattedDate}</span>

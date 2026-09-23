@@ -7,6 +7,8 @@ import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Users, Edit } from "lucide-react"
 import { getTournament, deleteTournament } from "@/app/actions/tournaments"
 import { DeleteButton } from "@/components/shared/delete-button"
+import { isFollowing, getFollowerCount } from "@/app/actions/follows"
+import { FollowButton } from "@/components/shared/follow-button"
 import { db, teams, matches, matchInnings } from "@mtk/database"
 import { eq, asc } from "drizzle-orm"
 import { notFound } from "next/navigation"
@@ -43,6 +45,9 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   if (!tournament) {
     notFound()
   }
+
+  const followingState = await isFollowing("tournament", id)
+  const followersCount = await getFollowerCount("tournament", id)
 
   // Fetch all registered teams
   const registeredTeams = await db.select().from(teams)
@@ -190,6 +195,13 @@ export default async function TournamentDetailPage({ params }: { params: Promise
                 <Badge variant="outline" className={`text-xs border-white/30 text-white bg-white/10 backdrop-blur-sm px-3 py-1.5 font-bold ${STATUS_COLORS[tournament.status ?? "draft"]}`}>
                   {STATUS_LABELS[tournament.status ?? "draft"]}
                 </Badge>
+                <FollowButton
+                  tenantId={tournament.tenantId}
+                  followableType="tournament"
+                  followableId={id}
+                  initialIsFollowing={followingState}
+                  initialFollowerCount={followersCount}
+                />
                 <Link href={`/dashboard/tournaments/${id}/edit`}>
                   <Button variant="outline" size="sm" className="bg-white/10 text-white border-white/30 hover:bg-white/20">
                     <Edit className="h-4 w-4 mr-1" />Edit

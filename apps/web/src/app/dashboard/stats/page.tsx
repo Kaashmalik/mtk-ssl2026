@@ -1,5 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
+import Link from "next/link"
+import { Button } from "@mtk/ui/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/card"
 import { Badge } from "@mtk/ui/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@mtk/ui/components/ui/tabs"
@@ -145,6 +147,11 @@ export default async function StatisticsPage() {
             <Trophy className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p className="font-semibold text-lg">No Stats Available Yet</p>
             <p className="text-sm mt-1">Start scoring matches and recording overs to populate leaderboards!</p>
+            <Link href="/dashboard/scoring" className="inline-block mt-6">
+              <Button variant="gradient-shine">
+                Go to Scoring Console
+              </Button>
+            </Link>
           </Card>
         </MotionWrapper>
       ) : (

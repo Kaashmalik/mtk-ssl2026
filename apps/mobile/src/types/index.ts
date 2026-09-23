@@ -1,17 +1,22 @@
 export interface Match {
   id: string;
-  tournamentId: string;
-  team1Id: string;
-  team2Id: string;
-  team1Name: string;
-  team2Name: string;
+  tenantId?: string;
+  tournamentId?: string;
+  team1Id?: string;
+  team2Id?: string;
+  teamAId?: string;
+  teamBId?: string;
+  team1Name?: string;
+  team2Name?: string;
   team1Score?: number;
   team2Score?: number;
   team1Wickets?: number;
   team2Wickets?: number;
   team1Overs?: number;
   team2Overs?: number;
-  status: "scheduled" | "toss" | "live" | "innings_break" | "completed" | "abandoned" | "cancelled" | "no_result" | "upcoming";
+  status: "scheduled" | "toss" | "live" | "innings_break" | "completed" | "abandoned" | "cancelled" | "no_result";
+  scheduledDate?: string;
+  scheduled_date?: string;
   scheduledAt?: string;
   startedAt?: string;
   completedAt?: string;
@@ -46,4 +51,3 @@ export interface BallData {
   timestamp: number;
   synced: boolean;
 }
-

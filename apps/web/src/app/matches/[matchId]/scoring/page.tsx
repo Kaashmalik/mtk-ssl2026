@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useParams } from "next/navigation";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useScoringStore, BallInput } from "@/stores/scoring-store";
+import { useScoringStore, BallInput, type InningsState } from "@/stores/scoring-store";
 import { BallInputComponent } from "@/components/scoring/ball-input";
 import { LiveScorecard } from "@/components/scoring/live-scorecard";
 import { ManhattanChart } from "@/components/scoring/manhattan-chart";
@@ -14,17 +13,81 @@ import { PlayerSelector } from "@/components/scoring/player-selector";
 import { VoiceInput } from "@/components/scoring/voice-input";
 import { Button } from "@mtk/ui";
 import { Card } from "@mtk/ui";
-import { Undo2, Redo2, Wifi, WifiOff, Zap } from "lucide-react";
-import { useOfflineSync } from "@/hooks/use-offline-sync";
-import { getSocket, disconnectSocket, onBallAdded, offBallAdded } from "@/lib/socket-client";
-import { useMatch } from "@/hooks/use-match-data";
+import { Undo2, Redo2, Wifi, WifiOff, Zap, Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+import {
+  recordBall as recordBallAction,
+  undoBall as undoBallAction,
+  getMatchForScoring,
+  createInnings,
+  getMatchPlayersForScoring,
+  type RecordBallInput,
+} from "@/app/actions/scoring";
 
-const queryClient = new QueryClient();
+// ─── Types ────────────────────────────────────────────────────
+
+interface MatchData {
+  match: {
+    id: string;
+    status: string;
+    matchFormat: string | null;
+    totalOvers: number | null;
+    teamAId: string;
+    teamBId: string;
+    tossWinnerId: string | null;
+    tossDecision: string | null;
+  };
+  teamA: { id: string; name: string };
+  teamB: { id: string; name: string };
+  innings: Array<{
+    id: string;
+    matchId: string;
+    teamId: string;
+    inningsNumber: number;
+    totalRuns: number;
+    totalWickets: number;
+    totalBalls: number;
+    extras: number;
+    byes: number;
+    legByes: number;
+    wides: number;
+    noBalls: number;
+    status: string;
+  }>;
+  recentBalls: Array<{
+    id: string;
+    inningsId: string;
+    overNumber: number;
+    ballNumber: number;
+    runs: number;
+    isWicket: boolean;
+    isWide: boolean;
+    isNoBall: boolean;
+    isBye: boolean;
+    isLegBye: boolean;
+    isFour: boolean;
+    isSix: boolean;
+    batsmanId: string | null;
+    bowlerId: string | null;
+  }>;
+}
+
+interface PlayersData {
+  teamA: Array<{ id: string; name: string; role: string | null }>;
+  teamB: Array<{ id: string; name: string; role: string | null }>;
+}
+
+// ─── Scoring Interface ───────────────────────────────────────
 
 function ScoringInterface() {
   const params = useParams();
   const matchId = params.matchId as string;
-  
+
+  const [matchData, setMatchData] = useState<MatchData | null>(null);
+  const [playersData, setPlayersData] = useState<PlayersData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<"scorecard" | "charts">("scorecard");
 
   const {
@@ -41,94 +104,236 @@ function ScoringInterface() {
   } = useScoringStore();
 
   // Get the actual innings data object
-  const currentInningsData = 
-    currentInningsNum === 1 ? innings1 : 
-    currentInningsNum === 2 ? innings2 : 
+  const currentInningsData =
+    currentInningsNum === 1 ? innings1 :
+    currentInningsNum === 2 ? innings2 :
     superOver;
 
   const [selectedBatsman, setSelectedBatsman] = useState<string>();
   const [selectedBatsman2] = useState<string>();
   const [selectedBowler, setSelectedBowler] = useState<string>();
 
-  const { data: match } = useMatch(matchId);
+  const totalOvers = matchData?.match.totalOvers ?? 20;
 
-  const currentTeamId = 
-    currentInningsNum === 1 ? match?.teamAId : 
-    currentInningsNum === 2 ? match?.teamBId : 
+  const currentTeamId =
+    currentInningsNum === 1 ? matchData?.match.teamAId :
+    currentInningsNum === 2 ? matchData?.match.teamBId :
     null;
 
-  useOfflineSync();
+  const [dbWriteFailed, setDbWriteFailed] = useState(false);
 
+  // ─── Load match data from DB ───────────────────────────────
   useEffect(() => {
     if (!matchId) return;
+    let cancelled = false;
 
-    const state = useScoringStore.getState();
-    const isNewMatch = state.matchId !== matchId;
-    setMatchId(matchId);
+    async function loadMatchData() {
+      try {
+        setLoading(true);
+        setLoadError(null);
 
-    if (isNewMatch) {
-      useScoringStore.setState({
-        innings1: {
-          inningsId: `innings-1-${matchId}`,
-          teamId: "", // Should be fetched from match data
-          totalRuns: 0,
-          totalWickets: 0,
-          totalBalls: 0,
-          extras: 0,
-          byes: 0,
-          legByes: 0,
-          wides: 0,
-          noBalls: 0,
-          status: "not_started",
-          currentOver: 0,
-          currentBall: 0,
-          balls: [],
-        },
-        innings1History: { history: [], historyIndex: -1 },
-        innings2: null,
-        innings2History: { history: [], historyIndex: -1 },
-        superOver: null,
-        superOverHistory: { history: [], historyIndex: -1 },
-        currentInnings: 1,
-        pendingSync: [],
-      });
-    }
+        const [matchResult, playersResult] = await Promise.all([
+          getMatchForScoring(matchId),
+          getMatchPlayersForScoring(matchId),
+        ]);
 
-    // Connect to socket for real-time sync
-    if (!isOnline) return;
+        if (cancelled) return;
 
-    getSocket(matchId);
+        setMatchData(matchResult as MatchData);
+        setPlayersData(playersResult as PlayersData);
+        setMatchId(matchId);
 
-    const handleBallAdded = (data: unknown) => {
-      // Handle incoming ball from other scorers
-      console.log("Ball added by another scorer:", data);
-    };
+        // Hydrate the Zustand store from DB data
+        const state = useScoringStore.getState();
+        const isNewMatch = state.matchId !== matchId;
+        const mr = matchResult as MatchData;
 
-    onBallAdded(handleBallAdded);
+        if (isNewMatch || !state.innings1) {
+          const inn1 = mr.innings.find((i) => i.inningsNumber === 1);
+          const inn2 = mr.innings.find((i) => i.inningsNumber === 2);
 
-    return () => {
-      offBallAdded(handleBallAdded);
-      disconnectSocket();
-    };
-  }, [matchId, isOnline, setMatchId]);
+          // Build innings state from DB data
+          const buildInningsState = (
+            inn: MatchData["innings"][number] | undefined,
+            num: number
+          ): InningsState | null => {
+            if (!inn) {
+              if (num === 1) {
+                // Create default innings 1
+                return {
+                  inningsId: `pending-innings-1-${matchId}`,
+                  teamId: mr.match.teamAId,
+                  totalRuns: 0,
+                  totalWickets: 0,
+                  totalBalls: 0,
+                  extras: 0,
+                  byes: 0,
+                  legByes: 0,
+                  wides: 0,
+                  noBalls: 0,
+                  status: "not_started",
+                  currentOver: 0,
+                  currentBall: 0,
+                  balls: [],
+                };
+              }
+              return null;
+            }
 
-  const handleBallAdded = async () => {
-    if (!isOnline) return;
-    const state = useScoringStore.getState();
-    const currentInningsState = state.currentInnings === 1 ? state.innings1 :
-      state.currentInnings === 2 ? state.innings2 :
-      state.superOver;
+            // Map DB balls to store format
+            const inningsBalls = mr.recentBalls
+              .filter((b) => b.inningsId === inn.id)
+              .map((b) => ({
+                id: b.id,
+                overNumber: b.overNumber,
+                ballNumber: b.ballNumber,
+                input: (b.isWicket ? "W" : b.isWide ? "WD" : b.isNoBall ? "NB" :
+                  b.isBye ? "B" : b.isLegBye ? "LB" : b.runs) as BallInput,
+                runs: b.runs,
+                isWicket: b.isWicket,
+                isWide: b.isWide,
+                isNoBall: b.isNoBall,
+                isBye: b.isBye,
+                isLegBye: b.isLegBye,
+                isFour: b.isFour,
+                isSix: b.isSix,
+                batsmanId: b.batsmanId ?? undefined,
+                bowlerId: b.bowlerId ?? undefined,
+                timestamp: Date.now(),
+              }));
 
-    if (currentInningsState) {
-      const lastBall = currentInningsState.balls[currentInningsState.balls.length - 1];
-      if (lastBall) {
-        const { emitBall } = await import("@/lib/socket-client");
-        emitBall(matchId, currentInningsState.inningsId, lastBall);
+            const totalBalls = inn.totalBalls;
+            return {
+              inningsId: inn.id,
+              teamId: inn.teamId,
+              totalRuns: inn.totalRuns,
+              totalWickets: inn.totalWickets,
+              totalBalls: inn.totalBalls,
+              extras: inn.extras,
+              byes: inn.byes,
+              legByes: inn.legByes,
+              wides: inn.wides,
+              noBalls: inn.noBalls,
+              status: inn.status as InningsState["status"],
+              currentOver: Math.floor(totalBalls / 6),
+              currentBall: totalBalls % 6,
+              balls: inningsBalls,
+            };
+          };
+
+          useScoringStore.setState({
+            matchId,
+            innings1: buildInningsState(inn1, 1),
+            innings1History: { history: [], historyIndex: -1 },
+            innings2: buildInningsState(inn2, 2),
+            innings2History: { history: [], historyIndex: -1 },
+            superOver: null,
+            superOverHistory: { history: [], historyIndex: -1 },
+            currentInnings: 1,
+          });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load match data:", err);
+          setLoadError(err instanceof Error ? err.message : "Failed to load match");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
-  };
 
-  const handleUndo = async () => {
+    loadMatchData();
+    return () => { cancelled = true; };
+  }, [matchId, setMatchId]);
+
+  // ─── Persist ball to DB (with retry) ────────────────────────
+  const persistBallToDB = useCallback(async () => {
+    if (!matchData) return;
+
+    const state = useScoringStore.getState();
+    const inningsKey = state.currentInnings === 1 ? "innings1" :
+      state.currentInnings === 2 ? "innings2" : "superOver";
+    const currentInnings = state[inningsKey] as InningsState | null;
+    if (!currentInnings || currentInnings.balls.length === 0) return;
+
+    const lastBall = currentInnings.balls[currentInnings.balls.length - 1];
+    if (!lastBall) return;
+
+    // Resolve the real innings ID (may need to create in DB first)
+    let inningsId = currentInnings.inningsId;
+
+    if (inningsId.startsWith("pending-innings-")) {
+      // Create the innings in DB first
+      const inningsNumber = state.currentInnings === 1 ? 1 :
+        state.currentInnings === 2 ? 2 : 3;
+      try {
+        const result = await createInnings({
+          matchId: state.matchId,
+          teamId: currentInnings.teamId,
+          inningsNumber,
+        });
+        if (result.innings) {
+          inningsId = result.innings.id;
+          // Update store with real ID
+          useScoringStore.setState({
+            [inningsKey]: { ...currentInnings, inningsId },
+          } as Partial<typeof state>);
+        }
+      } catch (err) {
+        console.error("Failed to create innings:", err);
+        toast.error("Failed to create innings in database. Please try again.");
+        return;
+      }
+    }
+
+    const ballInput: RecordBallInput = {
+      matchId: state.matchId,
+      inningsId,
+      overNumber: lastBall.overNumber,
+      ballNumber: lastBall.ballNumber,
+      runs: lastBall.runs,
+      batsmanId: lastBall.batsmanId || null,
+      bowlerId: lastBall.bowlerId || null,
+      isWicket: lastBall.isWicket,
+      wicketType: lastBall.wicketType || null,
+      isWide: lastBall.isWide,
+      isNoBall: lastBall.isNoBall,
+      isBye: lastBall.isBye,
+      isLegBye: lastBall.isLegBye,
+      isFour: lastBall.isFour ?? false,
+      isSix: lastBall.isSix ?? false,
+    };
+
+    // Retry with exponential backoff (3 attempts)
+    const MAX_RETRIES = 3;
+    let attempt = 0;
+    let lastError: unknown = null;
+
+    while (attempt < MAX_RETRIES) {
+      try {
+        await recordBallAction(ballInput);
+        setDbWriteFailed(false);
+        return; // Success
+      } catch (err) {
+        lastError = err;
+        attempt++;
+        if (attempt < MAX_RETRIES) {
+          // Exponential backoff: 500ms, 1500ms
+          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+        }
+      }
+    }
+
+    // All retries failed
+    console.error("Failed to persist ball to DB after retries:", lastError);
+    setDbWriteFailed(true);
+    toast.error("Failed to save ball to database. Your local scoring is preserved — data will sync when connection is restored.", {
+      duration: 6000,
+    });
+  }, [matchData]);
+
+  // ─── Handle Undo with DB persistence ───────────────────────
+  const handleUndo = useCallback(async () => {
     const state = useScoringStore.getState();
     const currentInningsState = state.currentInnings === 1 ? state.innings1 :
       state.currentInnings === 2 ? state.innings2 :
@@ -137,18 +342,27 @@ function ScoringInterface() {
     if (currentInningsState && currentInningsState.balls.length > 0) {
       const lastBall = currentInningsState.balls[currentInningsState.balls.length - 1];
       undo();
-      if (isOnline) {
-        const { emitUndoBall } = await import("@/lib/socket-client");
-        emitUndoBall(matchId, lastBall.id);
+
+      // Undo in DB
+      if (lastBall && !lastBall.id.startsWith("ball-")) {
+        startTransition(async () => {
+          try {
+            await undoBallAction(state.matchId, lastBall.id);
+          } catch (err) {
+            console.error("Failed to undo ball in DB:", err);
+            toast.error("Failed to undo ball in database. The local undo is preserved.");
+          }
+        });
       }
     }
-  };
+  }, [undo]);
 
+  // ─── Voice Command ─────────────────────────────────────────
   const handleVoiceCommand = useCallback(async (input: BallInput) => {
     if (!currentInningsData) return;
     const overNumber = currentInningsData.currentBall === 6 ? currentInningsData.currentOver + 1 : currentInningsData.currentOver;
     const ballNumber = currentInningsData.currentBall === 6 ? 1 : currentInningsData.currentBall + 1;
-    await addBall({
+    addBall({
       overNumber,
       ballNumber,
       input,
@@ -161,10 +375,38 @@ function ScoringInterface() {
       batsmanId: selectedBatsman,
       bowlerId: selectedBowler,
     });
-  }, [currentInningsData, addBall, selectedBatsman, selectedBowler]);
+    // Persist to DB directly (with retry)
+    await persistBallToDB();
+  }, [currentInningsData, addBall, selectedBatsman, selectedBowler, persistBallToDB]);
 
   const targetRuns = innings1 && currentInningsNum === 2 ? innings1.totalRuns + 1 : undefined;
-  const totalOvers = 20; // Should come from match settings
+
+  // ─── Loading State ─────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground font-medium">Loading match data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center space-y-4">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
+          <h2 className="text-xl font-semibold">Failed to Load Match</h2>
+          <p className="text-muted-foreground text-sm">{loadError}</p>
+          <Button onClick={() => window.location.reload()} variant="outline">
+            Try Again
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6 space-y-4 sm:space-y-6">
@@ -172,7 +414,13 @@ function ScoringInterface() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold">Live Scoring</h1>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-3 mt-2">
+            {matchData && (
+              <span className="text-sm font-medium text-muted-foreground">
+                {matchData.teamA.name} vs {matchData.teamB.name}
+                {matchData.match.totalOvers && ` · ${matchData.match.totalOvers} overs`}
+              </span>
+            )}
             {isOnline ? (
               <span className="flex items-center gap-1 text-green-600 text-sm">
                 <Wifi className="h-4 w-4" />
@@ -182,6 +430,18 @@ function ScoringInterface() {
               <span className="flex items-center gap-1 text-orange-600 text-sm">
                 <WifiOff className="h-4 w-4" />
                 Offline
+              </span>
+            )}
+            {dbWriteFailed && (
+              <span className="flex items-center gap-1 text-red-600 text-sm" role="alert">
+                <AlertCircle className="h-3 w-3" />
+                Unsaved changes
+              </span>
+            )}
+            {isPending && (
+              <span className="flex items-center gap-1 text-blue-600 text-sm">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Saving...
               </span>
             )}
           </div>
@@ -214,7 +474,6 @@ function ScoringInterface() {
               wicketsLost={currentInningsData?.totalWickets || 0}
               runsScored={currentInningsData?.totalRuns || 0}
               onApply={(revisedTarget) => {
-                // Handle DLS target application
                 console.log("DLS target applied:", revisedTarget);
               }}
             />
@@ -236,21 +495,21 @@ function ScoringInterface() {
       <div className="flex gap-2">
         <Button
           onClick={() => useScoringStore.setState({ currentInnings: 1 })}
-          variant={useScoringStore.getState().currentInnings === 1 ? "default" : "outline"}
+          variant={currentInningsNum === 1 ? "default" : "outline"}
           size="sm"
         >
-          Innings 1
+          Innings 1{matchData && ` (${matchData.teamA.name})`}
         </Button>
         <Button
           onClick={() => useScoringStore.setState({ currentInnings: 2 })}
-          variant={useScoringStore.getState().currentInnings === 2 ? "default" : "outline"}
+          variant={currentInningsNum === 2 ? "default" : "outline"}
           size="sm"
         >
-          Innings 2
+          Innings 2{matchData && ` (${matchData.teamB.name})`}
         </Button>
         <Button
           onClick={() => useScoringStore.setState({ currentInnings: "super_over" })}
-          variant={useScoringStore.getState().currentInnings === "super_over" ? "default" : "outline"}
+          variant={currentInningsNum === "super_over" ? "default" : "outline"}
           size="sm"
         >
           Super Over
@@ -261,8 +520,10 @@ function ScoringInterface() {
       <LiveScorecard targetRuns={targetRuns} totalOvers={totalOvers} />
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b">
+      <div className="flex gap-2 border-b" role="tablist" aria-label="Scoring views">
         <button
+          role="tab"
+          aria-selected={activeTab === "scorecard"}
           onClick={() => setActiveTab("scorecard")}
           className={`px-4 py-2 font-medium ${
             activeTab === "scorecard"
@@ -273,6 +534,8 @@ function ScoringInterface() {
           Scorecard
         </button>
         <button
+          role="tab"
+          aria-selected={activeTab === "charts"}
           onClick={() => setActiveTab("charts")}
           className={`px-4 py-2 font-medium ${
             activeTab === "charts"
@@ -288,12 +551,13 @@ function ScoringInterface() {
       {activeTab === "scorecard" ? (
         <div className="space-y-4">
           {/* Player Selection */}
-          {currentTeamId && (
+          {currentTeamId && playersData && (
             <Card className="p-4 sm:p-6">
               <h2 className="text-lg font-semibold mb-4">Player Selection</h2>
               <PlayerSelector
                 matchId={matchId}
                 teamId={currentTeamId}
+                playersData={playersData}
                 onBatsmanSelect={setSelectedBatsman}
                 onBowlerSelect={setSelectedBowler}
                 selectedBatsman={selectedBatsman}
@@ -307,7 +571,7 @@ function ScoringInterface() {
             <BallInputComponent
               batsmanId={selectedBatsman}
               bowlerId={selectedBowler}
-              onBallAdded={handleBallAdded}
+              onBallAdded={persistBallToDB}
             />
           </Card>
 
@@ -359,10 +623,5 @@ function ScoringInterface() {
 }
 
 export default function ScoringPage() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ScoringInterface />
-    </QueryClientProvider>
-  );
+  return <ScoringInterface />;
 }
-

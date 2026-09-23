@@ -12,7 +12,7 @@ interface MatchStore {
   currentMatch: Match | null;
   loading: boolean;
   error: string | null;
-  fetchMatches: () => Promise<void>;
+  fetchMatches: (tenantId?: string) => Promise<void>;
   fetchMatch: (matchId: string) => Promise<Match | null>;
   setCurrentMatch: (match: Match | null) => void;
   subscribeToMatch: (matchId: string) => () => void;
@@ -29,20 +29,26 @@ export const useMatchStore = create<MatchStore>()(
       loading: false,
       error: null,
 
-      fetchMatches: async () => {
+      fetchMatches: async (tenantId?: string) => {
         set({ loading: true, error: null });
         try {
-          const { data, error } = await supabase
+          let query = supabase
             .from("matches")
             .select("*")
-            .order("scheduledAt", { ascending: false })
+            .order("scheduled_date", { ascending: false })
             .limit(50);
+
+          if (tenantId) {
+            query = query.eq("tenant_id", tenantId);
+          }
+
+          const { data, error } = await query;
 
           if (error) throw error;
 
           const matches = (data || []) as Match[];
           const live = matches.filter((m) => m.status === "live");
-          const upcoming = matches.filter((m) => m.status === "upcoming");
+          const upcoming = matches.filter((m) => m.status === "scheduled");
           const completed = matches.filter((m) => m.status === "completed");
 
           set({
@@ -97,7 +103,7 @@ export const useMatchStore = create<MatchStore>()(
                   m.id === matchId ? updatedMatch : m
                 );
                 const live = updatedMatches.filter((m) => m.status === "live");
-                const upcoming = updatedMatches.filter((m) => m.status === "upcoming");
+                const upcoming = updatedMatches.filter((m) => m.status === "scheduled");
                 const completed = updatedMatches.filter((m) => m.status === "completed");
 
                 return {

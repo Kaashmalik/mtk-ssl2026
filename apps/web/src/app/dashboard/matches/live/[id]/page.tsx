@@ -3,7 +3,6 @@
 import { useEffect } from "react"
 import { useParams } from "next/navigation"
 import { create } from "zustand"
-import { useSocket } from "@/hooks/use-socket"
 import { Card, CardContent } from "@mtk/ui/components/ui/card"
 import { Button } from "@mtk/ui/components/ui/button"
 import { Badge } from "@mtk/ui/components/ui/badge"
@@ -117,7 +116,6 @@ export default function LiveScoringInterface() {
   const params = useParams();
   const matchId = params.id as string;
   const store = useMatchStore()
-  const { sendMessage } = useSocket({ room: matchId })
   
   // Dummy initialization for demo
   useEffect(() => {
@@ -132,12 +130,10 @@ export default function LiveScoringInterface() {
 
   const handleRun = (runs: number) => {
     store.addRun(runs);
-    sendMessage("match-update", useMatchStore.getState());
   }
 
   const handleWicket = () => {
     store.addWicket("bowled");
-    sendMessage("match-update", useMatchStore.getState());
   }
 
   const runRate = store.overs > 0 ? (store.totalRuns / store.overs).toFixed(2) : "0.00";

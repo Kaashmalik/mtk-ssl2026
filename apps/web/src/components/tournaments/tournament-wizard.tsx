@@ -18,6 +18,9 @@ import { CompletionScreen } from "./completion-screen"
 import { useLanguage } from "@/hooks/use-language"
 import { CopyFromPrevious } from "./copy-from-previous"
 
+import { createTournament } from "@/app/actions/tournaments"
+import { toast } from "sonner"
+
 const tournamentSchema = z.object({
   format: z.enum(["knockout", "league", "hybrid"]),
   matchType: z.enum(["t20", "odi", "tape_ball", "custom"]),
@@ -50,6 +53,7 @@ const STEPS = [
 export function TournamentWizard() {
   const [currentStep, setCurrentStep] = useState(0)
   const [isCompleted, setIsCompleted] = useState(false)
+  const [isPending, setIsPending] = useState(false)
   const { language, toggleLanguage, t } = useLanguage()
 
   const form = useForm<TournamentFormData>({
@@ -81,7 +85,7 @@ export function TournamentWizard() {
       if (currentStep < STEPS.length - 1) {
         setCurrentStep(currentStep + 1)
       } else {
-        handleSubmit()
+        await handleSubmit()
       }
     }
   }
@@ -96,9 +100,26 @@ export function TournamentWizard() {
     const isValid = await form.trigger()
     if (isValid) {
       const data = form.getValues()
-      console.log("Tournament data:", data)
-      // TODO: Submit to API
-      setIsCompleted(true)
+      setIsPending(true)
+      try {
+        await createTournament({
+          name: data.name,
+          description: data.description || null,
+          format: data.format as "knockout" | "league" | "hybrid" | "round_robin",
+          startDate: data.startDate || null,
+          endDate: data.endDate || null,
+          maxTeams: data.maxTeams,
+          status: "draft",
+          registrationOpen: false,
+        })
+        toast.success("Tournament created successfully!")
+        setIsCompleted(true)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to create tournament"
+        toast.error(message)
+      } finally {
+        setIsPending(false)
+      }
     }
   }
 
@@ -181,10 +202,17 @@ export function TournamentWizard() {
             <Button
               onClick={nextStep}
               className="min-w-[120px]"
+              disabled={isPending}
             >
-              {currentStep === STEPS.length - 1 ? t("create") : t("next")}
-              {currentStep < STEPS.length - 1 && (
-                <ChevronRight className="w-4 h-4 ml-2" />
+              {isPending ? (
+                "Saving..."
+              ) : (
+                <>
+                  {currentStep === STEPS.length - 1 ? t("create") : t("next")}
+                  {currentStep < STEPS.length - 1 && (
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  )}
+                </>
               )}
             </Button>
           </div>

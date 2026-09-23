@@ -22,7 +22,7 @@ interface NewTournamentFormProps {
   tenantId?: string
 }
 
-export function NewTournamentForm(_: NewTournamentFormProps) {
+export function NewTournamentForm(_props: NewTournamentFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)

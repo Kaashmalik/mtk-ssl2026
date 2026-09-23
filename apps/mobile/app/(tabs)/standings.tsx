@@ -38,8 +38,8 @@ const buildStandings = (matches: Match[]): StandingRow[] => {
   matches.forEach((match) => {
     if (match.status !== "completed") return;
 
-    const team1 = ensureRow(match.team1Id, match.team1Name);
-    const team2 = ensureRow(match.team2Id, match.team2Name);
+    const team1 = ensureRow(match.team1Id ?? "", match.team1Name ?? "");
+    const team2 = ensureRow(match.team2Id ?? "", match.team2Name ?? "");
 
     team1.played += 1;
     team2.played += 1;

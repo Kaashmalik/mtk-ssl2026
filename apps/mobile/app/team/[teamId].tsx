@@ -99,8 +99,11 @@ export default function TeamDetailScreen() {
             id,
             team1_id,
             team2_id,
+            team_a_id,
+            team_b_id,
             status,
             winner_id,
+            scheduled_date,
             scheduled_at,
             venue,
             team1_score,
@@ -108,21 +111,18 @@ export default function TeamDetailScreen() {
             team1_wickets,
             team2_wickets,
             team1_overs,
-            team2_overs,
-            team1:team1_id ( name ),
-            team2:team2_id ( name )
+            team2_overs
           `)
-          .or(`team1_id.eq.${teamId},team2_id.eq.${teamId}`)
-          .order("scheduled_at", { ascending: false });
+          .or(`team1_id.eq.${teamId},team2_id.eq.${teamId},team_a_id.eq.${teamId},team_b_id.eq.${teamId}`);
 
         if (matchesErr) throw matchesErr;
 
         const fetchedMatches = (matchesData || []).map((m: any) => ({
           id: m.id,
-          team1Id: m.team1_id,
-          team2Id: m.team2_id,
-          team1Name: m.team1?.name || "Team 1",
-          team2Name: m.team2?.name || "Team 2",
+          team1Id: m.team1_id || m.team_a_id,
+          team2Id: m.team2_id || m.team_b_id,
+          team1Name: m.team1?.name || "Team A",
+          team2Name: m.team2?.name || "Team B",
           team1Score: m.team1_score,
           team2Score: m.team2_score,
           team1Wickets: m.team1_wickets,
@@ -130,7 +130,8 @@ export default function TeamDetailScreen() {
           team1Overs: m.team1_overs,
           team2Overs: m.team2_overs,
           status: m.status,
-          scheduledAt: m.scheduled_at,
+          scheduledDate: m.scheduled_date || m.scheduled_at,
+          scheduledAt: m.scheduled_at || m.scheduled_date,
           venue: m.venue,
           winnerId: m.winner_id,
         }));

@@ -18,18 +18,29 @@ import { unstable_noStore as noStore } from "next/cache"
 
 async function getDashboardStats(tenantId: string) {
   try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const { lt } = await import("drizzle-orm")
+
     const [
       [{ totalTeams }],
       [{ totalPlayers }],
       [{ totalTournaments }],
       [{ totalMatches }],
       [{ activeMatches }],
+      [{ previousTeams }],
+      [{ previousPlayers }],
+      [{ previousTournaments }],
+      [{ previousMatches }],
     ] = await Promise.all([
       db.select({ totalTeams: count() }).from(teams).where(eq(teams.tenantId, tenantId)),
       db.select({ totalPlayers: count() }).from(players).where(eq(players.tenantId, tenantId)),
       db.select({ totalTournaments: count() }).from(tournaments).where(eq(tournaments.tenantId, tenantId)),
       db.select({ totalMatches: count() }).from(matches).where(eq(matches.tenantId, tenantId)),
       db.select({ activeMatches: count() }).from(matches).where(and(eq(matches.tenantId, tenantId), eq(matches.status, "live"))),
+      db.select({ previousTeams: count() }).from(teams).where(and(eq(teams.tenantId, tenantId), lt(teams.createdAt, thirtyDaysAgo))),
+      db.select({ previousPlayers: count() }).from(players).where(and(eq(players.tenantId, tenantId), lt(players.createdAt, thirtyDaysAgo))),
+      db.select({ previousTournaments: count() }).from(tournaments).where(and(eq(tournaments.tenantId, tenantId), lt(tournaments.createdAt, thirtyDaysAgo))),
+      db.select({ previousMatches: count() }).from(matches).where(and(eq(matches.tenantId, tenantId), lt(matches.createdAt, thirtyDaysAgo))),
     ])
 
     return {
@@ -38,11 +49,10 @@ async function getDashboardStats(tenantId: string) {
       totalTournaments: Number(totalTournaments),
       totalMatches: Number(totalMatches),
       activeMatches: Number(activeMatches),
-      // No historical comparison data yet — show 0
-      previousTeams: 0,
-      previousPlayers: 0,
-      previousTournaments: 0,
-      previousMatches: 0,
+      previousTeams: Number(previousTeams),
+      previousPlayers: Number(previousPlayers),
+      previousTournaments: Number(previousTournaments),
+      previousMatches: Number(previousMatches),
     }
   } catch (error) {
     console.error("Failed to fetch dashboard stats:", error)
@@ -203,12 +213,12 @@ async function DashboardStats({ tenantId }: { tenantId: string }) {
   const stats = await getDashboardStats(tenantId)
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" role="region" aria-label="Dashboard Statistics">
       <StatCard
         title="Total Teams"
         value={stats.totalTeams}
         previousValue={stats.previousTeams}
-        trendLabel="from last month"
+        trendLabel="new this month"
         icon={<Users className="h-full w-full" />}
         accentColor="oklch(0.6 0.16 145)"
         delay={0}
@@ -217,7 +227,7 @@ async function DashboardStats({ tenantId }: { tenantId: string }) {
         title="Active Players"
         value={stats.totalPlayers}
         previousValue={stats.previousPlayers}
-        trendLabel="from last month"
+        trendLabel="new this month"
         icon={<Sword className="h-full w-full" />}
         accentColor="oklch(0.6 0.15 240)"
         delay={1}
@@ -226,7 +236,7 @@ async function DashboardStats({ tenantId }: { tenantId: string }) {
         title="Tournaments"
         value={stats.totalTournaments}
         previousValue={stats.previousTournaments}
-        trendLabel="from last month"
+        trendLabel="new this month"
         icon={<Trophy className="h-full w-full" />}
         accentColor="oklch(0.7 0.15 80)"
         delay={2}
@@ -235,7 +245,7 @@ async function DashboardStats({ tenantId }: { tenantId: string }) {
         title="Total Matches"
         value={stats.totalMatches}
         previousValue={stats.previousMatches}
-        trendLabel="from last month"
+        trendLabel="new this month"
         icon={<CalendarDays className="h-full w-full" />}
         accentColor="oklch(0.65 0.2 300)"
         delay={3}

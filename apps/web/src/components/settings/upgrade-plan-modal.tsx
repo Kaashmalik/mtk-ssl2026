@@ -18,18 +18,14 @@ import {
   Upload, X, Loader2, CheckCircle2, AlertCircle,
   Building2, Phone, Copy, CheckCheck, ChevronDown, ChevronUp,
 } from "lucide-react"
-import type { Tenant } from "@mtk/database"
-
-const PLAN_PRICES: Record<string, number> = {
-  starter: 4999,
-  pro: 14999,
-  enterprise: 49999,
-}
+import type { Tenant, PlanKey } from "@mtk/database"
+import { PLAN_PRICES } from "@mtk/database/lib/plan-limits"
+import { PAYMENT_CONFIG } from "@/lib/payment-config"
 
 const PLAN_DISPLAY_NAMES: Record<string, string> = {
-  starter: "Starter — Rs 4,999",
-  pro: "Pro — Rs 14,999",
-  enterprise: "Enterprise — Rs 49,999",
+  starter: `Starter — Rs ${PLAN_PRICES.starter.toLocaleString()}`,
+  pro: `Pro — Rs ${PLAN_PRICES.pro.toLocaleString()}`,
+  enterprise: `Enterprise — Rs ${PLAN_PRICES.enterprise.toLocaleString()}`,
 }
 
 interface UpgradePlanModalProps {
@@ -58,7 +54,7 @@ export function UpgradePlanModal({
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const amount = selectedPlan ? PLAN_PRICES[selectedPlan] : 0
+  const amount = selectedPlan ? (PLAN_PRICES[selectedPlan as PlanKey] || 0) : 0
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
@@ -257,10 +253,10 @@ export function UpgradePlanModal({
                   </div>
                   <span className="text-sm font-medium">
                     {paymentMethod === "bank_transfer"
-                      ? "Meezan Bank — MUHAMMAD KASHIF"
+                      ? `${PAYMENT_CONFIG.bankName} — ${PAYMENT_CONFIG.bankTitle}`
                       : paymentMethod === "jazzcash_manual"
-                        ? "JazzCash — 0302 071 8182"
-                        : "EasyPaisa — 0302 071 8182"}
+                        ? `JazzCash — ${PAYMENT_CONFIG.jazzcashNumber}`
+                        : `EasyPaisa — ${PAYMENT_CONFIG.easypaisaNumber}`}
                   </span>
                 </div>
                 {showPaymentDetails ? (
@@ -276,28 +272,28 @@ export function UpgradePlanModal({
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Bank</div>
-                        <div className="font-medium flex items-center">Meezan Bank</div>
+                        <div className="font-medium flex items-center">{PAYMENT_CONFIG.bankName}</div>
                       </div>
                       <div>
                         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Branch</div>
-                        <div className="font-medium">BHUBTIAN BRANCH LHR</div>
+                        <div className="font-medium">{PAYMENT_CONFIG.bankBranch}</div>
                       </div>
                       <div>
                         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Account Title</div>
                         <div className="font-mono font-semibold flex items-center">
-                          MUHAMMAD KASHIF <CopyBtn text="MUHAMMAD KASHIF" field="m_bank_title" />
+                          {PAYMENT_CONFIG.bankTitle} <CopyBtn text={PAYMENT_CONFIG.bankTitle} field="m_bank_title" />
                         </div>
                       </div>
                       <div>
                         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Account No</div>
                         <div className="font-mono font-semibold flex items-center">
-                          1133 0109 676650 <CopyBtn text="11330109676650" field="m_bank_acct" />
+                          {PAYMENT_CONFIG.bankAccount} <CopyBtn text={PAYMENT_CONFIG.bankAccount} field="m_bank_acct" />
                         </div>
                       </div>
                       <div className="col-span-2">
                         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IBAN</div>
                         <div className="font-mono font-semibold flex items-center">
-                          PK26MEZN0011330109676650 <CopyBtn text="PK26MEZN0011330109676650" field="m_bank_iban" />
+                          {PAYMENT_CONFIG.bankIban} <CopyBtn text={PAYMENT_CONFIG.bankIban} field="m_bank_iban" />
                         </div>
                       </div>
                     </div>
@@ -309,20 +305,20 @@ export function UpgradePlanModal({
                             {paymentMethod === "jazzcash_manual" ? "JazzCash" : "EasyPaisa"} Name
                           </div>
                           <div className="font-mono font-semibold flex items-center">
-                            Muhammad Kashif <CopyBtn text="Muhammad Kashif" field={`m_${paymentMethod}_name`} />
+                            {paymentMethod === "jazzcash_manual" ? PAYMENT_CONFIG.jazzcashName : PAYMENT_CONFIG.easypaisaName} <CopyBtn text={paymentMethod === "jazzcash_manual" ? PAYMENT_CONFIG.jazzcashName : PAYMENT_CONFIG.easypaisaName} field={`m_${paymentMethod}_name`} />
                           </div>
                         </div>
                         <div>
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Number</div>
                           <div className="font-mono font-semibold flex items-center">
-                            0302 071 8182 <CopyBtn text="03020718182" field={`m_${paymentMethod}_num`} />
+                            {paymentMethod === "jazzcash_manual" ? PAYMENT_CONFIG.jazzcashNumber : PAYMENT_CONFIG.easypaisaNumber} <CopyBtn text={paymentMethod === "jazzcash_manual" ? PAYMENT_CONFIG.jazzcashNumber : PAYMENT_CONFIG.easypaisaNumber} field={`m_${paymentMethod}_num`} />
                           </div>
                         </div>
                       </div>
                       <div className="rounded-lg bg-teal-50 border border-teal-200 p-2.5 text-sm text-teal-700">
                         <div className="flex items-center gap-1.5 font-medium">
-                          💡 Raast ID: <span className="font-mono">0302 071 8182</span>
-                          <CopyBtn text="03020718182" field={`m_${paymentMethod}_raast`} />
+                          💡 Raast ID: <span className="font-mono">{PAYMENT_CONFIG.raastId}</span>
+                          <CopyBtn text={PAYMENT_CONFIG.raastId} field={`m_${paymentMethod}_raast`} />
                         </div>
                         <p className="text-xs text-teal-600 mt-0.5">You can also send via Raast for instant transfer</p>
                       </div>

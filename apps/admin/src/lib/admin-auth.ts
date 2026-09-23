@@ -25,11 +25,17 @@ export async function verifySuperAdmin(): Promise<string | null> {
     }
 
     const isRoleAdmin = user.role === "super_admin";
+    const isDev = process.env.NODE_ENV !== "production";
     const isEmailAdmin =
+      isDev &&
       SUPER_ADMIN_EMAIL &&
       user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
 
-    if (!isRoleAdmin && !isEmailAdmin) {
+    if (!isRoleAdmin) {
+      if (isEmailAdmin) {
+        console.warn(`[admin-auth] [DEV ONLY] Bootstrapping super_admin permissions for user email ${user.email} matching SUPER_ADMIN_EMAIL.`);
+        return userId;
+      }
       return null;
     }
 
@@ -44,10 +50,6 @@ export async function verifySuperAdmin(): Promise<string | null> {
  * Check if a given email is a super admin
  */
 export async function isSuperAdmin(email: string): Promise<boolean> {
-  if (SUPER_ADMIN_EMAIL && email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
-    return true;
-  }
-
   try {
     const [user] = await db
       .select({ role: users.role })
@@ -55,8 +57,16 @@ export async function isSuperAdmin(email: string): Promise<boolean> {
       .where(eq(users.email, email))
       .limit(1);
 
-    return user?.role === "super_admin";
-  } catch {
-    return false;
+    if (user?.role === "super_admin") {
+      return true;
+    }
+  } catch {}
+
+  const isDev = process.env.NODE_ENV !== "production"
+  if (isDev && SUPER_ADMIN_EMAIL && email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+    console.warn(`[admin-auth] [DEV ONLY] isSuperAdmin fallback hit for email ${email}`);
+    return true;
   }
+
+  return false;
 }

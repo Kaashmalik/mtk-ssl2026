@@ -11,6 +11,8 @@ import {
 } from "lucide-react"
 import { UpgradePlanModal } from "@/components/settings/upgrade-plan-modal"
 import type { Tenant } from "@mtk/database"
+import { PLAN_PRICES, PLAN_LIMITS } from "@mtk/database/lib/plan-limits"
+import { PAYMENT_CONFIG } from "@/lib/payment-config"
 
 /**
  * Standardized plan configuration — matches DB enum and marketing page.
@@ -19,45 +21,51 @@ const PLANS = [
   {
     key: "free",
     name: "Free",
-    price: 0,
-    displayPrice: "Rs 0",
+    price: PLAN_PRICES.free,
+    displayPrice: `Rs ${PLAN_PRICES.free.toLocaleString()}`,
     period: "forever",
     description: "Perfect for small local leagues",
-    features: ["Up to 4 teams", "Up to 40 players", "Basic scoring", "Points table", "Public league page"],
-    maxTeams: 4,
-    maxPlayers: 40,
-    whiteLabel: false,
-    customDomain: false,
-    liveStreaming: false,
+    features: [
+      `Up to ${PLAN_LIMITS.free.maxTeams} teams`,
+      `Up to ${PLAN_LIMITS.free.maxPlayers} players`,
+      "Basic scoring",
+      "Points table",
+      "Public league page"
+    ],
+    maxTeams: PLAN_LIMITS.free.maxTeams,
+    maxPlayers: PLAN_LIMITS.free.maxPlayers,
+    whiteLabel: PLAN_LIMITS.free.whiteLabel,
+    customDomain: PLAN_LIMITS.free.customDomain,
+    liveStreaming: PLAN_LIMITS.free.liveStreaming,
     popular: false,
   },
   {
     key: "starter",
     name: "Starter",
-    price: 4999,
-    displayPrice: "Rs 4,999",
+    price: PLAN_PRICES.starter,
+    displayPrice: `Rs ${PLAN_PRICES.starter.toLocaleString()}`,
     period: "per league",
     description: "For growing leagues",
     features: [
-      "Up to 16 teams",
-      "Up to 200 players",
+      `Up to ${PLAN_LIMITS.starter.maxTeams} teams`,
+      `Up to ${PLAN_LIMITS.starter.maxPlayers} players`,
       "Advanced scoring",
       "Player statistics",
       "Custom branding",
       "Payment collection",
     ],
-    maxTeams: 16,
-    maxPlayers: 200,
-    whiteLabel: false,
-    customDomain: false,
-    liveStreaming: false,
+    maxTeams: PLAN_LIMITS.starter.maxTeams,
+    maxPlayers: PLAN_LIMITS.starter.maxPlayers,
+    whiteLabel: PLAN_LIMITS.starter.whiteLabel,
+    customDomain: PLAN_LIMITS.starter.customDomain,
+    liveStreaming: PLAN_LIMITS.starter.liveStreaming,
     popular: false,
   },
   {
     key: "pro",
     name: "Pro",
-    price: 14999,
-    displayPrice: "Rs 14,999",
+    price: PLAN_PRICES.pro,
+    displayPrice: `Rs ${PLAN_PRICES.pro.toLocaleString()}`,
     period: "per league",
     description: "For professional leagues",
     features: [
@@ -69,18 +77,18 @@ const PLANS = [
       "Advanced analytics",
       "API access",
     ],
-    maxTeams: Infinity,
-    maxPlayers: Infinity,
-    whiteLabel: true,
-    customDomain: false,
-    liveStreaming: true,
+    maxTeams: PLAN_LIMITS.pro.maxTeams,
+    maxPlayers: PLAN_LIMITS.pro.maxPlayers,
+    whiteLabel: PLAN_LIMITS.pro.whiteLabel,
+    customDomain: PLAN_LIMITS.pro.customDomain,
+    liveStreaming: PLAN_LIMITS.pro.liveStreaming,
     popular: true,
   },
   {
     key: "enterprise",
     name: "Enterprise",
-    price: 49999,
-    displayPrice: "Rs 49,999",
+    price: PLAN_PRICES.enterprise,
+    displayPrice: `Rs ${PLAN_PRICES.enterprise.toLocaleString()}`,
     period: "per league",
     description: "For major tournaments & boards",
     features: [
@@ -91,11 +99,11 @@ const PLANS = [
       "Custom integrations",
       "Training & onboarding",
     ],
-    maxTeams: Infinity,
-    maxPlayers: Infinity,
-    whiteLabel: true,
-    customDomain: true,
-    liveStreaming: true,
+    maxTeams: PLAN_LIMITS.enterprise.maxTeams,
+    maxPlayers: PLAN_LIMITS.enterprise.maxPlayers,
+    whiteLabel: PLAN_LIMITS.enterprise.whiteLabel,
+    customDomain: PLAN_LIMITS.enterprise.customDomain,
+    liveStreaming: PLAN_LIMITS.enterprise.liveStreaming,
     popular: false,
   },
 ] as const
@@ -281,8 +289,8 @@ export function BillingPageClient({ tenant, clerkUserId: _clerkUserId }: Billing
                   <Building2 className="h-5 w-5" />
                 </div>
                 <div className="text-left">
-                  <div className="font-semibold text-sm">Meezan Bank</div>
-                  <div className="text-xs text-muted-foreground">Bank Transfer — BHUBTIAN BRANCH LHR</div>
+                  <div className="font-semibold text-sm">{PAYMENT_CONFIG.bankName}</div>
+                  <div className="text-xs text-muted-foreground">Bank Transfer — {PAYMENT_CONFIG.bankBranch}</div>
                 </div>
               </div>
               <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
@@ -295,27 +303,27 @@ export function BillingPageClient({ tenant, clerkUserId: _clerkUserId }: Billing
                   <div className="space-y-1">
                     <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Account Title</div>
                     <div className="font-mono text-sm font-semibold flex items-center">
-                      MUHAMMAD KASHIF
-                      <CopyButton text="MUHAMMAD KASHIF" field="bank_title" />
+                      {PAYMENT_CONFIG.bankTitle}
+                      <CopyButton text={PAYMENT_CONFIG.bankTitle} field="bank_title" />
                     </div>
                   </div>
                   <div className="space-y-1">
                     <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Account Number</div>
                     <div className="font-mono text-sm font-semibold flex items-center">
-                      1133 0109 676650
-                      <CopyButton text="11330109676650" field="bank_acct" />
+                      {PAYMENT_CONFIG.bankAccount}
+                      <CopyButton text={PAYMENT_CONFIG.bankAccount} field="bank_acct" />
                     </div>
                   </div>
                   <div className="space-y-1">
                     <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">IBAN</div>
                     <div className="font-mono text-sm font-semibold flex items-center">
-                      PK26MEZN0011330109676650
-                      <CopyButton text="PK26MEZN0011330109676650" field="bank_iban" />
+                      {PAYMENT_CONFIG.bankIban}
+                      <CopyButton text={PAYMENT_CONFIG.bankIban} field="bank_iban" />
                     </div>
                   </div>
                   <div className="space-y-1">
                     <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Branch</div>
-                    <div className="text-sm font-medium text-foreground">BHUBTIAN BRANCH, LAHORE</div>
+                    <div className="text-sm font-medium text-foreground">{PAYMENT_CONFIG.bankBranch}</div>
                   </div>
                 </div>
               </div>
@@ -357,15 +365,15 @@ export function BillingPageClient({ tenant, clerkUserId: _clerkUserId }: Billing
                     <div className="space-y-0.5">
                       <div className="text-xs text-muted-foreground">Account Name</div>
                       <div className="font-mono text-sm font-medium flex items-center">
-                        Muhammad Kashif
-                        <CopyButton text="Muhammad Kashif" field="jc_name" />
+                        {PAYMENT_CONFIG.jazzcashName}
+                        <CopyButton text={PAYMENT_CONFIG.jazzcashName} field="jc_name" />
                       </div>
                     </div>
                     <div className="space-y-0.5">
                       <div className="text-xs text-muted-foreground">Number</div>
                       <div className="font-mono text-sm font-medium flex items-center">
-                        0302 071 8182
-                        <CopyButton text="03020718182" field="jc_number" />
+                        {PAYMENT_CONFIG.jazzcashNumber}
+                        <CopyButton text={PAYMENT_CONFIG.jazzcashNumber} field="jc_number" />
                       </div>
                     </div>
                   </div>
@@ -383,15 +391,15 @@ export function BillingPageClient({ tenant, clerkUserId: _clerkUserId }: Billing
                     <div className="space-y-0.5">
                       <div className="text-xs text-muted-foreground">Account Name</div>
                       <div className="font-mono text-sm font-medium flex items-center">
-                        Muhammad Kashif
-                        <CopyButton text="Muhammad Kashif" field="ep_name" />
+                        {PAYMENT_CONFIG.easypaisaName}
+                        <CopyButton text={PAYMENT_CONFIG.easypaisaName} field="ep_name" />
                       </div>
                     </div>
                     <div className="space-y-0.5">
                       <div className="text-xs text-muted-foreground">Number</div>
                       <div className="font-mono text-sm font-medium flex items-center">
-                        0302 071 8182
-                        <CopyButton text="03020718182" field="ep_number" />
+                        {PAYMENT_CONFIG.easypaisaNumber}
+                        <CopyButton text={PAYMENT_CONFIG.easypaisaNumber} field="ep_number" />
                       </div>
                     </div>
                   </div>
@@ -411,8 +419,8 @@ export function BillingPageClient({ tenant, clerkUserId: _clerkUserId }: Billing
                   <div className="space-y-0.5">
                     <div className="text-xs text-muted-foreground">Raast ID (CNIC-linked)</div>
                     <div className="font-mono text-sm font-medium flex items-center">
-                      0302 071 8182
-                      <CopyButton text="03020718182" field="raast_id" />
+                      {PAYMENT_CONFIG.raastId}
+                      <CopyButton text={PAYMENT_CONFIG.raastId} field="raast_id" />
                     </div>
                   </div>
                 </div>

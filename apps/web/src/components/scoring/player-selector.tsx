@@ -3,12 +3,15 @@
 import { useState } from "react";
 import { Button } from "@mtk/ui";
 import { Card } from "@mtk/ui";
-import { useMatchPlayers } from "@/hooks/use-match-data";
 import { Users, X } from "lucide-react";
 
 interface PlayerSelectorProps {
   matchId: string;
   teamId: string;
+  playersData: {
+    teamA: Array<{ id: string; name: string; role: string | null }>;
+    teamB: Array<{ id: string; name: string; role: string | null }>;
+  };
   onBatsmanSelect: (playerId: string) => void;
   onBowlerSelect: (playerId: string) => void;
   selectedBatsman?: string;
@@ -17,15 +20,14 @@ interface PlayerSelectorProps {
 }
 
 export function PlayerSelector({
-  matchId,
   teamId,
+  playersData,
   onBatsmanSelect,
   onBowlerSelect,
   selectedBatsman,
   selectedBowler,
   selectedBatsman2,
 }: PlayerSelectorProps) {
-  const { data: playersData } = useMatchPlayers(matchId);
   const [showSelector, setShowSelector] = useState(false);
   const [selectingFor, setSelectingFor] = useState<"batsman" | "batsman2" | "bowler" | null>(null);
 

@@ -57,14 +57,12 @@ export interface ScoringState {
   innings2History: InningsHistory;
   superOverHistory: InningsHistory;
   isOnline: boolean;
-  pendingSync: BallData[];
 
   // Actions
-  addBall: (ball: Omit<BallData, "id" | "timestamp">) => Promise<void>;
+  addBall: (ball: Omit<BallData, "id" | "timestamp">) => void;
   undo: () => void;
   redo: () => void;
   setOnline: (online: boolean) => void;
-  syncPending: () => Promise<void>;
   resetInnings: (innings: 1 | 2 | "super_over") => void;
   setMatchId: (matchId: string) => void;
 }
@@ -127,11 +125,10 @@ export const useScoringStore = create<ScoringState>()(
       innings2History: createEmptyHistory(),
       superOverHistory: createEmptyHistory(),
       isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
-      pendingSync: [],
 
       setMatchId: (matchId: string) => set({ matchId }),
 
-      addBall: async (ballData) => {
+      addBall: (ballData) => {
         const state = get();
         const inningsKey = getInningsKey(state.currentInnings) as
           "innings1" | "innings2" | "superOver";
@@ -193,23 +190,12 @@ export const useScoringStore = create<ScoringState>()(
           newHistory = newHistory.slice(newHistory.length - MAX_HISTORY);
         }
 
-        // Save to offline storage if offline
-        if (!state.isOnline) {
-          try {
-            const { savePendingBall } = await import("@/lib/offline-sync");
-            await savePendingBall(state.matchId, ball);
-          } catch (error) {
-            console.error("Failed to save pending ball to IndexedDB:", error);
-          }
-        }
-
         const update: Partial<ScoringState> = {
           [inningsKey]: updatedInnings,
           [historyKey]: {
             history: newHistory,
             historyIndex: newHistory.length - 1,
           },
-          pendingSync: state.isOnline ? state.pendingSync : [...state.pendingSync, ball],
         };
 
         set(update);
@@ -265,50 +251,6 @@ export const useScoringStore = create<ScoringState>()(
 
       setOnline: (online: boolean) => set({ isOnline: online }),
 
-      syncPending: async () => {
-        const state = get();
-        if (!state.isOnline || state.matchId === "") return;
-
-        try {
-          const { getPendingBalls, markBallSynced, clearSyncedBalls } =
-            await import("@/lib/offline-sync");
-          const { emitBall } = await import("@/lib/socket-client");
-
-          const pending = await getPendingBalls(state.matchId);
-          if (pending.length === 0) {
-            set({ pendingSync: [] });
-            return;
-          }
-
-          // Resolve active inningsId from current state
-          const inningsKey = getInningsKey(state.currentInnings) as
-            "innings1" | "innings2" | "superOver";
-          const activeInnings = state[inningsKey];
-          const activeInningsId = activeInnings?.inningsId || "";
-
-          const failed: BallData[] = [];
-
-          for (const ball of pending) {
-            try {
-              emitBall(state.matchId, activeInningsId, ball);
-              await markBallSynced(ball.id);
-            } catch (error) {
-              console.error("Failed to sync ball:", error);
-              failed.push(ball);
-            }
-          }
-
-          await clearSyncedBalls();
-
-          const failedIds = new Set(failed.map((b) => b.id));
-          set({
-            pendingSync: state.pendingSync.filter((b) => failedIds.has(b.id)),
-          });
-        } catch (error) {
-          console.error("Failed to sync pending balls:", error);
-        }
-      },
-
       resetInnings: (innings) => {
         const state = get();
         const inningsKey = getInningsKey(innings) as
@@ -358,7 +300,6 @@ export const useScoringStore = create<ScoringState>()(
         innings1History: state.innings1History,
         innings2History: state.innings2History,
         superOverHistory: state.superOverHistory,
-        pendingSync: state.pendingSync,
       }),
     }
   )

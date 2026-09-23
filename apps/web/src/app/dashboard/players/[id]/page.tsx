@@ -4,9 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@mtk/ui/components/ui/
 import { Badge } from "@mtk/ui/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@mtk/ui/components/ui/tabs"
 import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
-import { ArrowLeft, Edit, Heart, Trophy, Target, Crosshair, Shield } from "lucide-react"
+import { ArrowLeft, Edit, Trophy, Target, Crosshair, Shield } from "lucide-react"
 import { getPlayer, deletePlayer } from "@/app/actions/players"
 import { DeleteButton } from "@/components/shared/delete-button"
+import { isFollowing, getFollowerCount } from "@/app/actions/follows"
+import { FollowButton } from "@/components/shared/follow-button"
 import { db, teams, battingScorecards, bowlingScorecards, matches, tournaments } from "@mtk/database"
 import { eq, inArray, desc } from "drizzle-orm"
 import { notFound } from "next/navigation"
@@ -42,6 +44,9 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
   if (!player) {
     notFound()
   }
+
+  const followingState = await isFollowing("player", id)
+  const followersCount = await getFollowerCount("player", id)
 
   // Resolve Team name
   let teamName = "Unassigned"
@@ -203,9 +208,13 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
                 <p className="text-muted-foreground text-sm mt-1">{teamName} · {player.city || "TBD City"}, {player.nationality || "TBD Nationality"}</p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">
-                  <Heart className="h-4 w-4 mr-1" />Follow
-                </Button>
+                <FollowButton
+                  tenantId={player.tenantId}
+                  followableType="player"
+                  followableId={id}
+                  initialIsFollowing={followingState}
+                  initialFollowerCount={followersCount}
+                />
                 <Link href={`/dashboard/players/${id}/edit`}>
                   <Button variant="outline" size="sm">
                     <Edit className="h-4 w-4 mr-1" />Edit
