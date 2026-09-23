@@ -242,7 +242,13 @@ export class StreamingGateway implements OnGatewayConnection, OnGatewayDisconnec
       return true;
     }
 
-    const presented = client.handshake.auth?.token;
+    const tokenFromAuth = client.handshake.auth?.token;
+    const authHeader = client.handshake.headers?.authorization;
+    const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+    const tokenFromHeader = headerValue?.startsWith('Bearer ')
+      ? headerValue.slice('Bearer '.length)
+      : headerValue;
+    const presented = tokenFromAuth || tokenFromHeader;
     if (typeof presented !== 'string' || presented.length === 0) return false;
 
     const a = Buffer.from(presented);
@@ -255,18 +261,19 @@ export class StreamingGateway implements OnGatewayConnection, OnGatewayDisconnec
     if (!data) return;
     this.clients.delete(client.id);
 
-    // 1. close this client's producers/transports and drop them from room maps
+    const producerCount = data.producerIds.length;
     await this.mediasoup.closeClientResources(data.roomId, data.producerIds, data.transportIds);
 
-    // 2. leave the socket.io room and update membership tracking
     client.leave(data.roomId);
+
+    this.streamingService.updateViewerCount(data.roomId, -1);
+    if (producerCount > 0) {
+      this.streamingService.updateProducerCount(data.roomId, -producerCount);
+    }
 
     const members = this.roomClients.get(data.roomId);
     members?.delete(client.id);
     if (members && members.size === 0) {
-      // 3. debounce the room close so a brief disconnect/reconnect does not
-      //    tear down the whole room (e.g. the last participant's phone drops
-      //    for a few seconds mid-match).
       this.scheduleRoomClose(data.roomId);
     }
 
@@ -280,9 +287,18 @@ export class StreamingGateway implements OnGatewayConnection, OnGatewayDisconnec
       const members = this.roomClients.get(roomId);
       if (members && members.size > 0) return;
       this.roomClients.delete(roomId);
-      this.mediasoup.closeRoom(roomId).then(() => {
-        this.logger.log(`Room ${roomId} closed after ${env.ROOM_CLOSE_GRACE_MS}ms grace`);
-      });
+      // Prefer StreamingService.endStream so activeStreams + mediasoup stay in sync.
+      const matchId = roomId.startsWith('stream-') ? roomId.slice('stream-'.length) : null;
+      const closePromise = matchId
+        ? this.streamingService.endStream(matchId)
+        : this.mediasoup.closeRoom(roomId);
+      closePromise
+        .then(() => {
+          this.logger.log(`Room ${roomId} closed after ${env.ROOM_CLOSE_GRACE_MS}ms grace`);
+        })
+        .catch((err) => {
+          this.logger.error(`Failed to close room ${roomId}: ${err}`);
+        });
     }, env.ROOM_CLOSE_GRACE_MS);
     timer.unref();
     this.closeTimers.set(roomId, timer);

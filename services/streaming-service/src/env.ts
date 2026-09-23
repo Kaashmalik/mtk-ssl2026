@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 export const env = z.object({
-  PORT: z.coerce.number().default(5004),
+  PORT: z.coerce.number().default(5005),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  APP_ENV: z.enum(['development', 'staging', 'production', 'test']).optional(),
   KAFKA_BROKERS: z.string().default('localhost:9092'),
   MEDIASOUP_LISTEN_IP: z.string().default('0.0.0.0'),
   MEDIASOUP_ANNOUNCED_IP: z.string().optional(),
