@@ -2,11 +2,13 @@
 
 ## Project Overview
 
-**Shakir Super League (SSL)** is a professional cricket league management platform built for tournament organizers, teams, and cricket enthusiasts. It delivers real-time match scoring, AI-powered commentary, live streaming, fantasy cricket, and comprehensive analytics — all wrapped in a modern, responsive web experience designed for the Pakistani cricket community.
+**Shakir Super League (SSL)** is a multi-tenant cricket league management platform for tournament organizers, teams, and fans: live scoring, subscriptions, white-label branding, plus beta AI commentary and WebRTC streaming.
 
-## Live URL
+## Deploy status
 
-Not deployed yet
+**Not publicly deployed** (DNS for `ssl.mtkcodex.site` / `ssl.cricket` did not resolve as of 2026-09-23).
+
+**Intended production domain:** `ssl.mtkcodex.site` (and `admin.` / `api.` / `ws.` subdomains) — see [`live.md`](./live.md).
 
 ## GitHub Repository
 
@@ -15,23 +17,21 @@ Not deployed yet
 ## Tech Stack
 
 - **Frontend:** Next.js 15, React 19, TypeScript, Tailwind CSS v4, Framer Motion, Zustand
-- **Backend:** NestJS v11 (microservices architecture), WebSocket gateways
-- **Database:** PostgreSQL (Supabase), Redis (caching/sessions), ClickHouse (analytics)
-- **Event Streaming:** Apache Kafka (real-time ball events, commentary)
-- **ORM & Validation:** Drizzle ORM, Zod (runtime env validation)
-- **Authentication:** Clerk (SSO, multi-tenant)
-- **Payments:** Stripe (international), JazzCash (Pakistan local)
-- **AI:** OpenAI GPT (multi-language commentary: English, Urdu, Punjabi, Pashto, Sindhi)
-- **Streaming:** Mediasoup (WebRTC live match streaming)
-- **Monitoring:** Sentry (error tracking)
-- **Deployment:** Docker Compose, Nginx reverse proxy
+- **Product backend:** Next.js server actions / Route Handlers + Drizzle ORM
+- **Specialist backend:** NestJS v11 (scoring SoT, streaming, AI commentary, payments, analytics, notifications)
+- **Database:** PostgreSQL (Supabase), Redis, Kafka, ClickHouse (analytics)
+- **Auth:** Clerk
+- **Media:** Cloudinary (admin uploads); Supabase Storage (payment proofs only)
+- **Payments:** Stripe; Pakistan = manual JazzCash / EasyPaisa / bank + proof upload **now**, with online merchant checkout planned as the easier future path
+- **Monitoring:** Sentry
+- **Intended deploy:** Vercel (apps) + Docker/VPS (services) + Supabase — see `live.md`
 
-## Key Features & Highlights
+Canonical architecture: [`docs/architecture/BACKEND_UNIFICATION_DECISION.md`](./docs/architecture/BACKEND_UNIFICATION_DECISION.md) (**Accepted**).
 
-1. **Real-Time Ball-by-Ball Scoring** — NestJS-powered scoring service with WebSocket live sync, offline resilience (IndexedDB queue), undo/redo history, and O(1) incremental state updates. Includes win probability gauge, run-rate Manhattan charts, wagon wheel visualization, and ball timeline.
+## Key features (honest)
 
-2. **AI Multi-Language Commentary** — GPT-driven commentary generation with circuit-breaker pattern and Redis caching. Supports five languages (English, Urdu, Punjabi, Pashto, Sindhi) with fallback templates for high availability.
-
-3. **WebRTC Live Streaming** — Mediasoup-based streaming service for low-latency live match broadcasts with multi-room support and producer/consumer management.
-
-4. **Fantasy Cricket & Analytics** — Full fantasy league schema with team creation, player selection, and automated points calculation. ClickHouse-powered analytics with leaderboards, player stats, and match insights. CQRS event-sourcing for immutable ball-event logs.
+1. **Ball-by-ball scoring** — Nest `scoring-service` is source of truth; charts/DLS UI on web; offline sequence via migration `023`.
+2. **AI commentary** — **Beta** (not GA).
+3. **WebRTC streaming** — **Beta** (not GA).
+4. **Fantasy cricket** — **Pre-MVP / roadmap** (schema only; not shipped UI).
+5. **Analytics** — ClickHouse service + Postgres scorecards / materialized views.

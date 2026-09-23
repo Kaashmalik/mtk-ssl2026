@@ -4,7 +4,7 @@
 **Timeline:** Q1-Q4 2025 (44 weeks)
 **Budget:** $500K-$1M
 **Team Size:** 10 Developers
-**Repository:** https://github.com/Kaashmalik/mtk-ssl.git
+**Repository:** https://github.com/Kaashmalik/mtk-ssl2026.git
 
 > **Detailed Migration Plan:** See [docs/migration/README.md](./docs/migration/README.md) for comprehensive 10-phase implementation guide.
 

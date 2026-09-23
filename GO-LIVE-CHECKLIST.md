@@ -84,7 +84,7 @@ sudo ufw --force enable
 
 ### 2.3 Clone & Configure Project
 ```bash
-git clone https://github.com/Kaashmalik/mtk-ssl.git
+git clone https://github.com/Kaashmalik/mtk-ssl2026.git
 cd mtk-ssl
 
 # Create production env file from template

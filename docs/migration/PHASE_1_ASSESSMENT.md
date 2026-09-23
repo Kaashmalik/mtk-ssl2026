@@ -16,7 +16,7 @@
 
 ## 1.2 Prerequisites
 
-- [ ] Access to GitHub repository (https://github.com/Kaashmalik/mtk-ssl.git)
+- [ ] Access to GitHub repository (https://github.com/Kaashmalik/mtk-ssl2026.git)
 - [ ] Team of 10 developers recruited and available
 - [ ] Budget approval ($500K-$1M)
 - [ ] Stakeholder alignment on 2025 transformation goals
@@ -29,7 +29,7 @@
 
 ```bash
 # Clone and analyze repository
-git clone https://github.com/Kaashmalik/mtk-ssl.git
+git clone https://github.com/Kaashmalik/mtk-ssl2026.git
 cd mtk-ssl
 
 # Generate dependency analysis

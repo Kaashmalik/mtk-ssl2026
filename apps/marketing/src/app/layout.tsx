@@ -82,7 +82,7 @@ export default function RootLayout({
               description: "Pakistan's #1 Cricket Tournament & League Management Platform",
               sameAs: [
                 "https://twitter.com/ShakirSuperL",
-                "https://github.com/maliktech/shakir-super-league",
+                "https://github.com/Kaashmalik/mtk-ssl2026",
               ],
             }),
           }}

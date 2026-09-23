@@ -1,239 +1,154 @@
-# Shakir Super League (SSL)  
-**Pakistan’s #1 Cricket Tournament & League Management Platform**  
-Built by **Malik Tech (MTK)** • Owned & Led by **Muhammad Kashif**
+# Shakir Super League (SSL)
+**Pakistan’s Cricket Tournament & League Management Platform**  
+Built by **Malik Tech (MTK)** • Led by **Muhammad Kashif**
 
-![Shakir Super League](https://raw.githubusercontent.com/maliktech/shakir-super-league/main/public/og-image.png)
+**Repository:** https://github.com/Kaashmalik/mtk-ssl2026.git
 
-**Live Demo:** https://ssl.cricket  
-**Marketing Site:** https://shakirsuperleague.com  
-**Documentation:** https://docs.ssl.cricket  
-**Super Admin:** https://admin.ssl.cricket (Only accessible to Muhammad Kashif)
-
----
-
-## About Shakir Super League
-
-**Shakir Super League (SSL)** is the most powerful, modern, mobile-first, multi-tenant cricket tournament management SaaS built exclusively for Pakistan and the global Pakistani diaspora.
-
-From gali cricket to professional leagues — SSL handles everything:
-- Tournament creation (Knockout, League, Hybrid)
-- Team & player registration with payments
-- Live ball-by-ball scoring (offline-first)
-- Real-time scorecards, Manhattan, Wagon Wheel, Worm
-- Points table, NRR, DLS, Super Over
-- Fan engagement, live streaming, fantasy
-- White-label & custom domain for big leagues
-- AI-powered Urdu + English commentary (coming soon)
-
-Used by thousands of leagues across Pakistan, UAE, UK, Canada & Saudi Arabia.
+| | |
+|---|---|
+| **Deploy status** | **Not publicly deployed** (as of 2026-09-23). Target domains do not resolve yet. |
+| **Intended production domain** | `ssl.mtkcodex.site` (web), `admin.ssl.mtkcodex.site`, `api.ssl.mtkcodex.site`, `ws.ssl.mtkcodex.site` — see [`live.md`](./live.md) |
+| **Brand / marketing aspirational** | `ssl.cricket` (future cutover; not live) |
 
 ---
 
-## Features
+## About
 
-| Category               | Features                                                                                          |
-|------------------------|---------------------------------------------------------------------------------------------------|
-| Tournament Management  | Knockout • Round Robin • Group + Knockout • Custom brackets • Auto scheduling • DLS • Super Over |
-| Live Scoring           | Ball-by-ball • Offline sync • Multiple scorers • Wagon wheel • Manhattan • Worm • Voice scoring |
-| Teams & Players        | Full profiles • Stats • Batting/Bowling roles • Jersey numbers • Transfer history               |
-| Payments (Pakistan)    | JazzCash • EasyPaisa • Bank Transfer • Credit Card • Subscription per league                    |
-| Fan Experience         | Live scores • Push notifications • Highlights • Predictions • Fantasy cricket                   |
-| White-Label (Enterprise)| Custom domain • Remove SSL branding • Custom app name • Dedicated support                      |
-| Analytics              | Leaderboards • Player ratings • Win probability • Performance graphs                             |
-| Mobile Apps            | Native iOS & Android (Expo) • PWA • Offline scoring                                             |
-| Languages              | Urdu + English (Full RTL/LTR support)                                                            |
+SSL is a multi-tenant cricket tournament management SaaS for Pakistan and the diaspora: leagues, teams, players, live scoring, subscriptions, and white-label branding.
 
 ---
 
-## Tech Stack (2025 Enterprise Grade)
+## Architecture (canonical — hybrid)
 
-| Layer             | Technology                                      |
-|-------------------|-------------------------------------------------|
-| Monorepo          | Turborepo + pnpm                                |
-| Frontend          | Next.js 15 (App Router) + React 19 + TypeScript |
-| UI                | Tailwind CSS + shadcn/ui + Framer Motion        |
-| Mobile            | Expo React Native + EAS Build                   |
-| Backend           | NestJS (Modular)                                |
-| Database          | Supabase (PostgreSQL + RLS + Storage)           |
-| Auth              | Clerk (Multi-tenant ready)                      |
-| Real-time         | Socket.io + Redis (Upstash)                     |
-| Payments          | Stripe • JazzCash • EasyPaisa                   |
-| Storage           | Supabase Storage + Cloudflare R2               |
-| Deployment        | Vercel • Railway • Supabase • Expo              |
-| SEO               | next-seo • Sitemap • Structured Data            |
-| Analytics         | PostHog (Self-hosted ready)                     |
-| Error Tracking    | Sentry                                          |
+**Accepted decision:** [`docs/architecture/BACKEND_UNIFICATION_DECISION.md`](./docs/architecture/BACKEND_UNIFICATION_DECISION.md)  
+(ADR 001 microservices-first plan is **superseded** by that hybrid decision.)
+
+| Plane | Owns | Tech |
+|-------|------|------|
+| **Next.js + Drizzle** | Product CRUD, admin APIs, tenant branding, registrations | Next.js 15, React 19, Clerk, Supabase Postgres |
+| **Nest specialist services** | Scoring (SoT), streaming, AI commentary, payments webhooks, analytics, notifications, SSL/ACME helpers | NestJS 11, Redis, Kafka, ClickHouse, mediasoup |
+
+**Scoring source of truth:** `services/scoring-service` is canonical (incl. offline sync / `ball_sequence` — migration `023`). Web scoring server actions are a **thin proxy** toward that service (migration in progress; do not add new ball-write logic in actions).
+
+**Tenant isolation:** App-layer scoping (Clerk + Drizzle / `withTenantContext` / `tenant_id` filters) is the **real control plane**. Postgres RLS exists for PostgREST defense-in-depth; most web/admin/Nest traffic uses `DATABASE_URL` and **bypasses RLS**. See [`docs/PROJECT_GUIDE.md`](./docs/PROJECT_GUIDE.md).
+
+---
+
+## Features (honest status)
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| Tournament / team / player CRUD | **Shipped (app)** | Next.js server actions + admin routes |
+| Live scoring UI (charts, DLS calc, voice input) | **Partial** | UI exists; Nest scoring-service is SoT |
+| Offline sync | **In progress** | Mobile hooks + migration `023`; web IndexedDB client not present |
+| Payments (PK) | **Manual now; online later** | Both paths are planned. **Current shipping path:** JazzCash / EasyPaisa / bank + proof upload (Supabase Storage). **Future:** enable JazzCash/EasyPaisa merchant (online) APIs for one-tap checkout — easier for all users. Online provider code is scaffolded (JazzCash class; EasyPaisa stub). |
+| Stripe | **Partial** | International path / payment-service |
+| Media | **Cloudinary** (admin uploads) + **Supabase Storage** (payment proofs only) | No Cloudflare R2 |
+| AI commentary | **Beta** | Early-access, not GA |
+| WebRTC streaming | **Beta** | Early-access, not GA |
+| Fantasy cricket | **Pre-MVP / roadmap** | Schema only — not a shipped product feature |
+| White-label / custom domain | **Partial** | Tables + settings + ACME path |
+| NRR / auto-scheduling / fantasy UX | **Roadmap** | Do not market as shipped |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Monorepo | Turborepo + pnpm 9 |
+| Frontend | Next.js 15 (App Router) + React 19 + TypeScript |
+| UI | Tailwind CSS + shadcn/ui + Framer Motion |
+| Mobile | Expo React Native (~54) + EAS |
+| Product backend | Next.js server actions / Route Handlers + Drizzle |
+| Specialist backend | NestJS 11 services under `services/` |
+| Database | Supabase (PostgreSQL); Redis; Kafka; ClickHouse (analytics) |
+| Auth | Clerk |
+| Media | Cloudinary (images); Supabase Storage (payment proofs) |
+| Payments | Stripe; PK = manual proof now + online JazzCash/EasyPaisa later |
+| Error tracking | Sentry |
+| Intended deploy | Vercel (apps) + VPS/Docker (services) + Supabase — see `live.md` |
 
 ---
 
 ## Project Structure
 
 ```bash
-shakir-super-league/
+mtk-ssl/
 ├── apps/
-│   ├── web/               # Main app (app.ssl.cricket)
-│   ├── admin/             # Super Admin Panel (admin.ssl.cricket)
-│   ├── marketing/         # Landing page (ssl.cricket)
-│   └── mobile/            # React Native app (iOS/Android)
+│   ├── web/               # League portal (target: ssl.mtkcodex.site)
+│   ├── admin/             # Super Admin
+│   ├── marketing/         # Landing
+│   └── mobile/            # Expo iOS/Android
 ├── packages/
-│   ├── ui/                # Shared shadcn/ui + cricket components
-│   ├── database/          # Drizzle ORM + Supabase types
-│   ├── socket/            # Real-time types & client
-│   └── config/            # Shared ESLint, Tailwind, TS config
-├── services/
-│   └── api/               # NestJS backend (multi-tenant)
-├── supabase/
-│   ├── migrations/        # All SQL + RLS policies
-│   └── functions/         # Edge functions
-├── .github/workflows/     # CI/CD pipelines
+│   ├── ui/
+│   ├── database/          # Drizzle schemas + repos
+│   ├── dns-provider/
+│   ├── observability/
+│   └── config/
+├── services/              # Nest specialists (hybrid — see ADR)
+│   ├── scoring-service/   # Scoring SoT
+│   ├── streaming-service/
+│   ├── ai-commentary-service/
+│   ├── payment-service/
+│   ├── analytics-service/
+│   ├── notification-service/
+│   ├── auth-service/
+│   ├── tournament-service/
+│   ├── api-gateway/
+│   └── api/               # Tenants + SSL/ACME helpers
+├── supabase/migrations/
 └── turbo.json
 ```
 
 ---
 
-## Quick Start (Local Development)
+## Quick Start
 
 ### Prerequisites
-- Node.js ≥ 18
-- pnpm ≥ 8
-- Supabase account
-- Clerk.dev project
-- Stripe + JazzCash accounts
+- Node.js ≥ 20
+- pnpm ≥ 9
+- Supabase project
+- Clerk project
 
 ```bash
-# Clone repository
-git clone https://github.com/maliktech/shakir-super-league.git
-cd shakir-super-league
+git clone https://github.com/Kaashmalik/mtk-ssl2026.git
+cd mtk-ssl2026
 
-# Install dependencies
 pnpm install
-
-# Setup environment variables
 cp .env.example .env.local
-# Edit with your keys (Supabase, Clerk, Stripe, JazzCash, etc.)
+# Fill Supabase, Clerk, Cloudinary, payment, Redis/Kafka as needed
 
-# Start Supabase locally (optional)
-supabase start
-
-# Run all apps
 pnpm run dev
 ```
 
-### Default URLs
-| App              | URL                     |
-|------------------|-------------------------|
-| Marketing Site   | http://localhost:3000   |
-| Web App          | http://localhost:3001   |
-| Super Admin      | http://localhost:3002   |
-| NestJS API       | http://localhost:4000   |
-| Expo Mobile      | expo start              |
+### Local URLs
+| App | URL |
+|-----|-----|
+| Marketing | http://localhost:3000 |
+| Web | http://localhost:3001 |
+| Super Admin | http://localhost:3002 |
+| Scoring service (default) | http://localhost:4002 |
+| Expo | `pnpm --filter mobile start` |
+
+Full env contract: [`.env.example`](./.env.example). Deploy plan: [`live.md`](./live.md).
 
 ---
 
-## Environment Variables (.env.example)
+## Documentation
 
-```env
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3001
-NEXT_PUBLIC_MARKETING_URL=http://localhost:3000
-
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
-# Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-
-# Payments primary 
-JAZZCASH_MERCHANT_ID=
-JAZZCASH_PASSWORD=
-JAZZCASH_HASH_KEY=
-
-# Redis (Upstash)
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
-
-# Super Admin
-SUPER_ADMIN_EMAIL=kaash0542@gmail.com
-```
-
----
-
-## Multi-Tenancy & White-Label
-
-- Every league = tenant (`tenants` table)
-- Subdomain: `yourleague.ssl.cricket`
-- Custom domain: `yourleague.com` (Enterprise)
-- Full branding control (logo, colors, favicon)
-- Remove “Powered by SSL” (White-label)
-
----
-
-## Deployment
-
-### One-Click Deploy
-
-| Service       | Link |
-|---------------|------|
-| Vercel (Frontend) | [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmaliktech%2Fshakir-super-league) |
-| Railway (API) | Deploy on Railway |
-| Supabase      | Connect project |
-| Expo          | EAS Build |
-
----
-
-## Super Admin Access
-
-Only **Muhammad Kashif** has access to:
-- Global revenue dashboard
-- Suspend any league
-- Impersonate users
-- Approve white-label requests
-- Push global updates
-
----
-
-## Contributing
-
-We welcome contributions!  
-See [CONTRIBUTING.md](CONTRIBUTING.md)
-
-```bash
-git checkout -b feature/amazing-scoring-ui
-git commit -m "feat: add wagon wheel with shot direction"
-git push origin feature/amazing-scoring-ui
-```
-
----
-
-## Support
-
-- Documentation: https://docs.ssl.cricket
-- Email: support@ssl.cricket
-- WhatsApp: +92 300 1234567
-- Discord: https://discord.gg/sslcricket
-- Twitter/X: [@ShakirSuperL](https://twitter.com/ShakirSuperL)
+| Doc | Purpose |
+|-----|---------|
+| [`docs/PROJECT_GUIDE.md`](./docs/PROJECT_GUIDE.md) | Product & architecture truth |
+| [`docs/architecture/BACKEND_UNIFICATION_DECISION.md`](./docs/architecture/BACKEND_UNIFICATION_DECISION.md) | Hybrid backend (Accepted) |
+| [`docs/adr/001-microservices-migration.md`](./docs/adr/001-microservices-migration.md) | Superseded by unification ADR |
+| [`live.md`](./live.md) | Go-live / `ssl.mtkcodex.site` deploy plan |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributions |
 
 ---
 
 ## License
 
-Proprietary • Owned by **Malik Tech (MTK)**  
-White-label licenses available for enterprises.
+Proprietary • Owned by **Malik Tech (MTK)**
 
----
-
-**Shakir Super League** — Built with ❤️ for cricket lovers in Pakistan and worldwide.  
-**Malik Tech • Muhammad Kashif • 2025–2026**
-
-Let’s make every league legendary.  
-#SSLTakeover #PakistaniCricketTech #MalikTech
-
---- 
-
-**Star this repo if you believe in the future of Pakistani cricket technology!**  
-https://github.com/Kaashmalik/mtk-ssl.git
-
-Made with pride in Pakistan
+**Shakir Super League** — Built for cricket in Pakistan and worldwide.

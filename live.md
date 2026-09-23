@@ -5,9 +5,10 @@
 
 **Project:** Shakir Super League (SSL) — Cricket Management SaaS  
 **Version:** 2.0.0  
-**Domain:** `ssl.mtkcodex.site` (primary)  
+**Intended domain:** `ssl.mtkcodex.site` (primary) — **not publicly deployed yet** (DNS unresolved as of 2026-09-23)  
+**Repository:** https://github.com/Kaashmalik/mtk-ssl2026.git  
 **Author:** Muhammad Kashif / Malik Tech  
-**Last Updated:** July 2026
+**Last Updated:** 2026-09-23 (deploy status reconciled with doc-truth audit)
 
 ---
 
@@ -419,7 +420,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ```bash
 # Clone project
-git clone https://github.com/Kaashmalik/mtk-ssl.git
+git clone https://github.com/Kaashmalik/mtk-ssl2026.git
 cd mtk-ssl
 
 # Create production env from template

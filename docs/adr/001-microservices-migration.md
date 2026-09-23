@@ -1,13 +1,17 @@
 # ADR 001: Microservices Migration Strategy
 
-**Status:** Accepted  
+**Status:** Superseded  
 **Date:** November 2025  
+**Superseded:** 2026-09-23  
+**Superseded by:** [`docs/architecture/BACKEND_UNIFICATION_DECISION.md`](../architecture/BACKEND_UNIFICATION_DECISION.md) (**Accepted** hybrid: Next.js/Drizzle CRUD + Nest specialists; Nest `scoring-service` is scoring SoT).  
 **Deciders:** Muhammad Kashif, Tech Lead  
 **Technical Story:** SSL Enterprise Transformation 2025
 
+> **Do not treat this ADR as the current operating model.** Full “all request traffic via microservices / database-per-service / Kong gateway” was the original direction. The accepted architecture is the hybrid unification ADR. Specialist Nest services (scoring, streaming, AI commentary, payments, analytics, notifications) remain; product CRUD stays on Next.js + Drizzle unless explicitly migrated later.
+
 ## Context
 
-The SSL platform currently runs as a monolithic NestJS application serving all features (tenants, scoring, matches, payments). As the platform scales to thousands of leagues across Pakistan, UAE, UK, Canada, and Saudi Arabia, we face:
+The SSL platform was described as a monolithic NestJS application serving all features (tenants, scoring, matches, payments). As the platform scales to thousands of leagues across Pakistan, UAE, UK, Canada, and Saudi Arabia, we face:
 
 1. **Scaling limitations** - Cannot scale individual components
 2. **Deployment risk** - Single deployment affects entire system

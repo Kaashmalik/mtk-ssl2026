@@ -1,7 +1,7 @@
 # SSL Enterprise Migration Plan 2025
 ## Shakir Super League: Monolithic to Microservices Transformation
 
-**Repository:** https://github.com/Kaashmalik/mtk-ssl.git  
+**Repository:** https://github.com/Kaashmalik/mtk-ssl2026.git  
 **Timeline:** Q1-Q4 2025 (44 weeks)  
 **Budget:** $500K-$1M  
 **Team Size:** 10 Developers

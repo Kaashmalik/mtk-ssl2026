@@ -37,7 +37,7 @@ export function Footer({ tenantBranding }: FooterProps) {
                 <Twitter className="w-5 h-5" />
               </a>
               <a
-                href="https://github.com/maliktech/shakir-super-league"
+                href="https://github.com/Kaashmalik/mtk-ssl2026"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-emerald-400 transition-colors"
