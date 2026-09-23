@@ -7,6 +7,7 @@ import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { ArrowLeft, Trophy } from "lucide-react"
 import { getMatch, deleteMatch } from "@/app/actions/matches"
 import { DeleteButton } from "@/components/shared/delete-button"
+import { MatchLifecycleControls } from "@/components/matches/match-lifecycle-controls"
 import { getFullScorecard } from "@/app/actions/scorecards"
 import { ShareButton } from "@/components/share/share-button"
 import { db, teams, matchInnings, players, venues } from "@mtk/database"
@@ -235,6 +236,15 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
             </div>
           </CardContent>
         </Card>
+      </MotionWrapper>
+
+      <MotionWrapper variant="fadeInUp" delay={0.15}>
+        <MatchLifecycleControls
+          matchId={match.id}
+          status={match.status}
+          teamA={{ id: teamA.id, name: teamA.name }}
+          teamB={{ id: teamB.id, name: teamB.name }}
+        />
       </MotionWrapper>
 
       {/* Scorecards */}

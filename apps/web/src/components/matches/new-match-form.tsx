@@ -15,15 +15,16 @@ import { createMatch } from "@/app/actions/matches"
 
 interface NewMatchFormProps {
   teams: { id: string; name: string }[]
+  tournaments: { id: string; name: string }[]
 }
 
-export function NewMatchForm({ teams }: NewMatchFormProps) {
+export function NewMatchForm({ teams, tournaments }: NewMatchFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    teamAId: "", teamBId: "", matchFormat: "t20", matchType: "group",
-    totalOvers: "20", scheduledDate: "", venue: "", umpire1: "", umpire2: "",
+    teamAId: "", teamBId: "", tournamentId: "", matchFormat: "t20", matchType: "group",
+    totalOvers: "20", scheduledDate: "", venueNote: "", umpire1: "", umpire2: "",
   })
 
   const updateField = (key: string, value: string) => setFormData(prev => ({ ...prev, [key]: value }))
@@ -44,12 +45,18 @@ export function NewMatchForm({ teams }: NewMatchFormProps) {
         await createMatch({
           teamAId: formData.teamAId,
           teamBId: formData.teamBId,
+          tournamentId: formData.tournamentId || null,
           matchFormat: formData.matchFormat as "t20" | "odi" | "test" | "t10" | "custom",
           matchType: formData.matchType as "group" | "knockout" | "final" | "semi_final" | "quarter_final" | "friendly" | "practice",
           totalOvers: Number(formData.totalOvers),
           scheduledDate: formData.scheduledDate || null,
           umpire1: formData.umpire1.trim() || null,
-          umpire2: formData.umpire2.trim() || null,
+          umpire2: [
+            formData.umpire2.trim() || null,
+            formData.venueNote.trim() ? `Venue: ${formData.venueNote.trim()}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || null,
         })
         toast.success("Match scheduled successfully!")
         router.push("/dashboard/matches")
@@ -123,6 +130,18 @@ export function NewMatchForm({ teams }: NewMatchFormProps) {
           <Card>
             <CardHeader><CardTitle className="text-lg">Match Details</CardTitle></CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label>Tournament</Label>
+                <Select value={formData.tournamentId || "none"} onValueChange={(v) => updateField("tournamentId", v === "none" ? "" : v)}>
+                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Optional" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No tournament (friendly)</SelectItem>
+                    {tournaments.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label>Format</Label>
                 <Select value={formData.matchFormat} onValueChange={(v) => { updateField("matchFormat", v); updateField("totalOvers", v === "t20" ? "20" : v === "odi" ? "50" : v === "t10" ? "10" : "20") }}>
@@ -158,8 +177,9 @@ export function NewMatchForm({ teams }: NewMatchFormProps) {
                 <Input id="date" type="datetime-local" value={formData.scheduledDate} onChange={(e) => updateField("scheduledDate", e.target.value)} className="mt-1.5" />
               </div>
               <div className="sm:col-span-2">
-                <Label htmlFor="venue">Venue</Label>
-                <Input id="venue" value={formData.venue} onChange={(e) => updateField("venue", e.target.value)} placeholder="Gaddafi Stadium, Lahore" className="mt-1.5" />
+                <Label htmlFor="venue">Venue note</Label>
+                <Input id="venue" value={formData.venueNote} onChange={(e) => updateField("venueNote", e.target.value)} placeholder="Gaddafi Stadium, Lahore" className="mt-1.5" />
+                <p className="text-xs text-muted-foreground mt-1">Stored with match notes until venue records are linked.</p>
               </div>
               <div>
                 <Label htmlFor="u1">Umpire 1</Label>
