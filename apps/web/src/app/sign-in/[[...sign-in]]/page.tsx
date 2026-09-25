@@ -1,9 +1,9 @@
-import { SignIn } from "@clerk/nextjs";
 import Image from "next/image";
 import { headers } from "next/headers";
 import { db } from "@mtk/database";
 import { tenants, tenantBranding } from "@mtk/database";
 import { eq } from "drizzle-orm";
+import { ClerkSignIn } from "./clerk-sign-in";
 
 async function getTenantBranding() {
   const headersList = await headers();
@@ -94,18 +94,7 @@ export default async function SignInPage() {
             />
           </div>
         )}
-        <SignIn
-          appearance={{
-            elements: {
-              rootBox: "mx-auto",
-              card: "shadow-xl border border-white/20 bg-white/80 backdrop-blur-md dark:bg-black/50 dark:border-white/10 rounded-xl",
-            },
-            variables: {
-              colorPrimary: customStyles?.primaryColor || "oklch(0.6 0.16 145)", // Using our OKLCH green as default
-              colorBackground: "transparent",
-            },
-          }}
-        />
+        <ClerkSignIn primaryColor={customStyles?.primaryColor} />
       </div>
     </div>
   );

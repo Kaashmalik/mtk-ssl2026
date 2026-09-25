@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { SignIn } from "@clerk/nextjs";
 import { ShieldCheck, Lock } from "lucide-react";
 import { buildMetadata } from "@/lib/seo";
+import { ClerkSignIn } from "./clerk-sign-in";
 
 export const metadata: Metadata = buildMetadata({
   title: "Sign In",
@@ -39,27 +39,7 @@ export default function LoginPage() {
         </div>
 
         {/* Clerk sign-in card */}
-        <SignIn
-          appearance={{
-            elements: {
-              rootBox: "w-full",
-              card: "rounded-2xl border border-border/60 bg-card shadow-2xl shadow-black/8 backdrop-blur-sm w-full",
-              headerTitle: "text-foreground font-semibold",
-              headerSubtitle: "text-muted-foreground",
-              formFieldLabel: "text-sm font-medium text-foreground",
-              formFieldInput:
-                "rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary",
-              formButtonPrimary:
-                "bg-primary hover:bg-primary/90 rounded-lg font-semibold text-sm shadow-lg shadow-primary/20 transition-all",
-              footerActionLink: "text-primary hover:text-primary/80",
-              identityPreviewEditButton: "text-primary",
-              dividerLine: "bg-border",
-              dividerText: "text-muted-foreground text-xs",
-            },
-          }}
-          redirectUrl="/"
-          signUpUrl="/login"
-        />
+        <ClerkSignIn />
 
         {/* Security note */}
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">

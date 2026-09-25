@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { type UserRole, getNavigationForRole } from "@/lib/rbac"
+import { useClerkReady } from "@/components/providers"
 
 const ICON_MAP: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard,
@@ -34,6 +35,7 @@ const ICON_MAP: Record<string, typeof LayoutDashboard> = {
 export function Header({ userRole }: { userRole?: UserRole }) {
   const pathname = usePathname()
   const router = useRouter()
+  const clerkReady = useClerkReady()
   const [commandOpen, setCommandOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -170,7 +172,7 @@ export function Header({ userRole }: { userRole?: UserRole }) {
         </Button>
 
         <ThemeToggle />
-        <UserButton afterSignOutUrl="/" />
+        {clerkReady && <UserButton afterSignOutUrl="/" />}
       </header>
 
       {/* Command Palette */}

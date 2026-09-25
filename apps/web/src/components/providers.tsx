@@ -4,6 +4,20 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "next-themes";
 import { LanguageProvider } from "@/hooks/use-language";
 import { PWARegister } from "@/components/pwa-register";
+import { createContext, useContext } from "react";
+
+/**
+ * True only when a real Clerk publishable key was found and <ClerkProvider> is
+ * actually mounted. Components that render Clerk's <SignIn>, <UserButton>, etc.
+ * must check this first: those components call useSession() internally and throw
+ * "useSession can only be used within the <ClerkProvider /> component" during
+ * static prerender when the provider is absent, which fails the whole build.
+ */
+const ClerkReadyContext = createContext(false);
+
+export function useClerkReady(): boolean {
+  return useContext(ClerkReadyContext);
+}
 
 /** Reject template/placeholder keys so builds never pass junk into Clerk. */
 function resolveClerkPublishableKey(): string | undefined {
@@ -36,8 +50,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   // Build/CI without a real key: skip Clerk so static generation can finish.
   if (!publishableKey) {
-    return themed;
+    return (
+      <ClerkReadyContext.Provider value={false}>
+        {themed}
+      </ClerkReadyContext.Provider>
+    );
   }
 
-  return <ClerkProvider publishableKey={publishableKey}>{themed}</ClerkProvider>;
+  return (
+    <ClerkProvider publishableKey={publishableKey}>
+      <ClerkReadyContext.Provider value={true}>
+        {themed}
+      </ClerkReadyContext.Provider>
+    </ClerkProvider>
+  );
 }

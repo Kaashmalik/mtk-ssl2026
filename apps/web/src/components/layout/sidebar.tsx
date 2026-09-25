@@ -93,7 +93,6 @@ function buildNavGroups(role: UserRole): NavGroup[] {
 export function Sidebar({ userRole }: { userRole?: UserRole }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
-  const { user, isLoaded } = useUser()
 
   // Build RBAC-filtered navigation
   const navGroups = useMemo(() => {
@@ -222,33 +221,45 @@ export function Sidebar({ userRole }: { userRole?: UserRole }) {
 
       {/* User section at bottom */}
       <AnimatePresence>
-        {!collapsed && isLoaded && user && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="border-t p-3"
-          >
-            <div className="flex items-center gap-3 px-2">
-              {user.imageUrl ? (
-                <img
-                  src={user.imageUrl}
-                  alt={user.fullName || "User Avatar"}
-                  className="h-8 w-8 rounded-full shrink-0 border border-primary/20"
-                />
-              ) : (
-                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-                  {user.firstName?.charAt(0) || ""}{user.lastName?.charAt(0) || ""}
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{user.fullName}</p>
-                <p className="text-xs text-muted-foreground truncate">{user.primaryEmailAddress?.emailAddress}</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {!collapsed && <SidebarUserCard />}
       </AnimatePresence>
     </motion.aside>
+  )
+}
+
+/**
+ * Rendered only when <ClerkProvider> is mounted. useUser() throws when it is not,
+ * so the hook has to live in a child that is never mounted without the provider.
+ */
+function SidebarUserCard() {
+  const { user, isLoaded } = useUser()
+
+  if (!isLoaded || !user) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="border-t p-3"
+    >
+      <div className="flex items-center gap-3 px-2">
+        {user.imageUrl ? (
+          <img
+            src={user.imageUrl}
+            alt={user.fullName || "User Avatar"}
+            className="h-8 w-8 rounded-full shrink-0 border border-primary/20"
+          />
+        ) : (
+          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+            {user.firstName?.charAt(0) || ""}{user.lastName?.charAt(0) || ""}
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{user.fullName}</p>
+          <p className="text-xs text-muted-foreground truncate">{user.primaryEmailAddress?.emailAddress}</p>
+        </div>
+      </div>
+    </motion.div>
   )
 }

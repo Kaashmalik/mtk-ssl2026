@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
 import { Sun, Moon, Bell, Search } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useClerkReady } from "@/components/providers";
 
 const routeLabels: Record<string, string> = {
   "/":               "Dashboard",
@@ -26,6 +27,7 @@ const routeLabels: Record<string, string> = {
 export function Header() {
   const { setTheme, resolvedTheme } = useTheme();
   const pathname = usePathname();
+  const clerkReady = useClerkReady();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -77,7 +79,7 @@ export function Header() {
         </button>
 
         {/* User avatar */}
-        <UserButton afterSignOutUrl="/login" />
+        {clerkReady && <UserButton afterSignOutUrl="/login" />}
       </div>
     </header>
   );

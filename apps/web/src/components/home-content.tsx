@@ -8,8 +8,11 @@ import { MotionWrapper } from "@mtk/ui/components/ui/motion-wrapper"
 import { Trophy, Activity, Users, Zap, ArrowRight, PlayCircle } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@mtk/ui/components/theme-toggle"
+import { useClerkReady } from "@/components/providers"
 
 export function HomeContent() {
+  const clerkReady = useClerkReady()
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       {/* Dynamic Background Elements */}
@@ -26,20 +29,28 @@ export function HomeContent() {
         </div>
         <div className="flex items-center gap-4">
           <ThemeToggle />
-          <SignedOut>
-            <SignInButton mode="modal">
+          {clerkReady ? (
+            <>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <Button variant="ghost">Sign In</Button>
+                </SignInButton>
+                <SignInButton mode="modal">
+                  <Button variant="neo-glass" className="rounded-full">Get Started</Button>
+                </SignInButton>
+              </SignedOut>
+              <SignedIn>
+                <Link href="/dashboard">
+                  <Button variant="gradient-shine" className="rounded-full">Dashboard</Button>
+                </Link>
+                <UserButton />
+              </SignedIn>
+            </>
+          ) : (
+            <Link href="/sign-in">
               <Button variant="ghost">Sign In</Button>
-            </SignInButton>
-            <SignInButton mode="modal">
-              <Button variant="neo-glass" className="rounded-full">Get Started</Button>
-            </SignInButton>
-          </SignedOut>
-          <SignedIn>
-            <Link href="/dashboard">
-              <Button variant="gradient-shine" className="rounded-full">Dashboard</Button>
             </Link>
-            <UserButton />
-          </SignedIn>
+          )}
         </div>
       </nav>
 
@@ -61,8 +72,31 @@ export function HomeContent() {
             </p>
 
             <div className="flex flex-wrap gap-4">
-              <SignedOut>
-                <SignInButton mode="modal">
+              {clerkReady ? (
+                <>
+                  <SignedOut>
+                    <SignInButton mode="modal">
+                      <Button
+                        size="xl"
+                        variant="gradient-shine"
+                        className="group shadow-[0_10px_30px_rgba(22,163,74,0.35)] text-white"
+                      >
+                        Start Your League
+                        <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
+                      </Button>
+                    </SignInButton>
+                  </SignedOut>
+                  <SignedIn>
+                    <Link href="/dashboard">
+                      <Button size="xl" variant="gradient-shine" className="group">
+                        Manage Dashboard
+                        <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
+                      </Button>
+                    </Link>
+                  </SignedIn>
+                </>
+              ) : (
+                <Link href="/sign-in">
                   <Button
                     size="xl"
                     variant="gradient-shine"
@@ -71,16 +105,8 @@ export function HomeContent() {
                     Start Your League
                     <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                   </Button>
-                </SignInButton>
-              </SignedOut>
-              <SignedIn>
-                <Link href="/dashboard">
-                  <Button size="xl" variant="gradient-shine" className="group">
-                    Manage Dashboard
-                    <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
-                  </Button>
                 </Link>
-              </SignedIn>
+              )}
               <Button
                 size="xl"
                 variant="neo-glass"
