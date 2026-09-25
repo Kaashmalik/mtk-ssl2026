@@ -1,549 +1,283 @@
-# SSL Production Deployment Guide
+# SSL Production Deployment
 
-Complete step-by-step guide to deploy Shakir Super League (SSL) to production.
+Go-live runbook for Shakir Super League.
 
-**Estimated Time:** 30-45 minutes  
-**Difficulty:** Intermediate  
-**Prerequisites:** Docker, Docker Compose, PowerShell/Terminal
+**Target:** single VPS (Ubuntu) running Docker Compose + Supabase (managed Postgres)
+**Entry point:** `bash deploy-vps.sh --phase all`
+**Gate:** `bash scripts/preflight.sh` must pass first
 
----
-
-## Table of Contents
-
-1. [Pre-Deployment Checklist](#step-1-pre-deployment-checklist)
-2. [Choose Your Database](#step-2-choose-your-database)
-3. [Configure Environment](#step-3-configure-environment)
-4. [Build Production Images](#step-4-build-production-images)
-5. [Deploy Infrastructure](#step-5-deploy-infrastructure)
-6. [Run Database Migrations](#step-6-run-database-migrations)
-7. [Start All Services](#step-7-start-all-services)
-8. [Verify Deployment](#step-8-verify-deployment)
-9. [Configure Domain & SSL](#step-9-configure-domain--ssl-optional)
-10. [Post-Deployment Tasks](#step-10-post-deployment-tasks)
-11. [Troubleshooting](#troubleshooting)
+> `deploy.sh` is a deprecated shim that forwards to `deploy-vps.sh`. Use `deploy-vps.sh`.
 
 ---
 
-## Step 1: Pre-Deployment Checklist
+## Domains
 
-Before you begin, ensure you have:
+| Subdomain | Purpose | Target |
+|---|---|---|
+| `ssl.mtkcodex.site` | Public web app | Vercel |
+| `api.ssl.mtkcodex.site` | REST API | VPS nginx |
+| `ws.ssl.mtkcodex.site` | WebSocket (scoring/live) | VPS nginx |
+| `gateway.ssl.mtkcodex.site` | API gateway | VPS nginx |
 
-- [ ] **Docker Desktop** installed and running
-  ```powershell
-  docker --version  # Should show 24.x or higher
-  docker-compose --version  # Should show 2.x or higher
-  ```
-
-- [ ] **pnpm** installed
-  ```powershell
-  pnpm --version  # Should show 9.x
-  ```
-
-- [ ] **Git repository cloned**
-  ```powershell
-  cd d:\MalikTech\mtk-ssl
-  git status  # Should show clean working tree
-  ```
-
-- [ ] **Minimum 4GB RAM free** (check in Task Manager)
-
-- [ ] **Ports available:** 3000, 3001, 3002, 4000, 4002, 5432, 6379, 9092
-  ```powershell
-  # Check if ports are in use
-  Get-NetTCPConnection -LocalPort 3000,3001,3002,4000,4002,5432,6379 -ErrorAction SilentlyContinue
-  ```
+Admin (`apps/admin`) and marketing (`apps/marketing`) deploy to Vercel separately.
 
 ---
 
-## Step 2: Choose Your Database
+## Step 1 — VPS prerequisites
 
-### Option A: Supabase (Recommended for Production)
+On the VPS (Ubuntu 22.04/24.04):
 
-**Best for:** Most users, zero maintenance, scales automatically
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker "$USER" && newgrp docker
+sudo apt install -y git certbot
 
-```powershell
-# 1. Sign up at https://supabase.com
-# 2. Create new project
-# 3. Choose region (Mumbai for Pakistan users, East US for global)
-# 4. Copy these values from Project Settings:
-
-SUPABASE_URL=https://xxxxxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIs...
-DATABASE_URL=postgresql://postgres.xxxxxxx:[password]@aws-0-xxxxx.pooler.supabase.com:5432/postgres
+git clone <your-repo-url> /opt/mtk-ssl
+cd /opt/mtk-ssl
 ```
 
-**Pros:** Managed, backups, free tier (500MB), connection pooling  
-**Cons:** 60 connection limit on free tier
+Confirm Docker is running:
+
+```bash
+docker --version && docker compose version && docker info >/dev/null && echo "daemon OK"
+```
 
 ---
 
-### Option B: Self-Hosted PostgreSQL (Docker)
+## Step 2 — Create the production env file
 
-**Best for:** Full control, high connection counts
+`.env.production` in the repo is a **placeholder template** — it contains no real
+credentials. Copy it and fill in real values:
 
-**Pros:** Unlimited connections, no bandwidth limits  
-**Cons:** You manage backups and maintenance
+```bash
+cd /opt/mtk-ssl
+cp .env.production .env.prod
+chmod 600 .env.prod
+nano .env.prod
+```
 
-**We'll configure this in Step 3.**
+### Required — deploy will abort without these
+
+| Variable | Source |
+|---|---|
+| `DATABASE_URL` | Supabase → Project Settings → Database → Connection string (use the **session pooler** URI) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API |
+| `CLERK_SECRET_KEY` | Clerk dashboard → API Keys (`sk_live_…`) |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk dashboard → API Keys (`pk_live_…`) |
+| `STRIPE_SECRET_KEY` | Stripe dashboard → API keys (`sk_live_…`) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe → Webhooks → signing secret (`whsec_…`) |
+| `SCORING_GATEWAY_TOKEN` | Generate: `openssl rand -hex 32` |
+| `STREAMING_ACCESS_TOKEN` | Generate: `openssl rand -hex 32` |
+| `MEDIASOUP_ANNOUNCED_IP` | The VPS public IP |
+
+`SCORING_GATEWAY_TOKEN` and `STREAMING_ACCESS_TOKEN` have no external dashboard —
+generate them yourself. Both services throw at import in production when they are
+missing, so the containers crash-loop without them.
+
+### Strongly recommended
+
+`SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `SENTRY_DSN`, `REDIS_URL`,
+`KAFKA_BROKERS`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`,
+`NEXT_PUBLIC_SITE_URL`, `CRON_SECRET`.
+
+Leave optional integrations commented out if you are not using them yet.
 
 ---
 
-## Step 3: Configure Environment
+## Step 3 — Run migrations
 
-### 3.1 Create Production Environment File
+Against Supabase, from your **local** machine or the VPS (needs pnpm + Node 20):
 
-```powershell
-cd d:\MalikTech\mtk-ssl
-
-# Copy example to production file
-copy .env.example .env.prod
-
-# Edit with your values
-notepad .env.prod
-```
-
-### 3.2 Minimum Required Variables (MVP)
-
-Fill in these **required** variables in `.env.prod`:
-
-```env
-# ============================================
-# REQUIRED: Database
-# ============================================
-
-# Option A: Supabase (RECOMMENDED)
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-DATABASE_URL=postgresql://postgres.[ref]:[pass]@aws-0-xxxxx.pooler.supabase.com:5432/postgres
-
-# Option B: Self-hosted (fill if NOT using Supabase)
-POSTGRES_USER=ssl
-POSTGRES_PASSWORD=your_secure_password_here  # Generate: openssl rand -base64 32
-POSTGRES_DB=ssl_prod
-DATABASE_URL=postgresql://ssl:${POSTGRES_PASSWORD}@postgres:5432/ssl_prod
-
-# ============================================
-# REQUIRED: Authentication (Clerk)
-# Get from https://dashboard.clerk.com
-# ============================================
-CLERK_SECRET_KEY=sk_live_your_key_here
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_your_key_here
-
-# ============================================
-# REQUIRED: Payments (Stripe)
-# Get from https://dashboard.stripe.com/apikeys
-# ============================================
-STRIPE_SECRET_KEY=sk_live_your_key_here
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
-
-# ============================================
-# REQUIRED: Redis
-# ============================================
-REDIS_URL=redis://redis:6379
-
-# ============================================
-# REQUIRED: Kafka
-# ============================================
-KAFKA_BROKERS=kafka:29092
-```
-
-### 3.3 Optional but Recommended Variables
-
-```env
-# AI Commentary (OpenAI) - https://platform.openai.com/api-keys
-OPENAI_API_KEY=sk-your_key_here
-
-# Analytics (ClickHouse)
-CLICKHOUSE_USER=ssl
-CLICKHOUSE_PASSWORD=your_password_here
-
-# Push Notifications (Firebase) - https://console.firebase.google.com
-FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}
-
-# Email (SMTP)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_app_password
-
-# Error Tracking (Sentry) - https://sentry.io
-SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
-
-# Frontend URLs
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com
-NEXT_PUBLIC_WS_URL=wss://ws.yourdomain.com
-```
-
-### 3.4 Save and Close
-
-Save `.env.prod` and close the editor.
-
----
-
-## Step 4: Build Production Images
-
-### 4.1 Install Dependencies
-
-```powershell
-cd d:\MalikTech\mtk-ssl
+```bash
 pnpm install
-```
-
-### 4.2 Build All Docker Images
-
-```powershell
-# Build all services (this takes 5-10 minutes)
-docker-compose -f docker-compose.prod.yml build
-
-# Or build specific services only
-# docker-compose -f docker-compose.prod.yml build api-gateway scoring-service web
-```
-
-**Expected Output:**
-```
-[+] Building 156.3s (25/25) FINISHED
- => [api-gateway builder 7/7] RUN pnpm build
- => [scoring-service builder 7/7] RUN pnpm build
- => [web builder 8/8] RUN pnpm build
-```
-
----
-
-## Step 5: Deploy Infrastructure
-
-### 5.1 Start Infrastructure Services
-
-```powershell
-# Start databases, cache, and message broker
-docker-compose -f docker-compose.prod.yml up -d postgres redis kafka clickhouse zookeeper
-
-# If using Supabase, skip postgres:
-# docker-compose -f docker-compose.prod.yml up -d redis kafka clickhouse zookeeper
-```
-
-### 5.2 Wait for Services to Be Ready
-
-```powershell
-# Check status (wait until all show "healthy")
-docker-compose -f docker-compose.prod.yml ps
-
-# Should see:
-# ssl-prod-postgres    healthy
-# ssl-prod-redis       healthy
-# ssl-prod-kafka       healthy
-```
-
-Wait approximately **30 seconds** for all services to initialize.
-
-### 5.3 Verify Database Connectivity
-
-```powershell
-# Test PostgreSQL connection (skip if using Supabase)
-docker exec ssl-prod-postgres pg_isready -U ssl
-
-# Should return: /var/run/postgresql:5432 - accepting connections
-```
-
----
-
-## Step 6: Run Database Migrations
-
-### 6.1 Push Schema to Database
-
-```powershell
-# Run Drizzle migrations
 pnpm --filter @mtk/database migrate
-
-# OR if using Supabase CLI
-supabase db push
 ```
 
-### 6.2 Verify Tables Created
+Verify tables exist in the Supabase dashboard → Table Editor.
 
-```powershell
-# Check tables exist (for self-hosted)
-docker exec ssl-prod-postgres psql -U ssl -d ssl_prod -c "\dt"
+---
 
-# Should show tables: users, teams, matches, players, ball_events, etc.
+## Step 4 — TLS certificate
+
+nginx needs `nginx/ssl/cert.pem` and `nginx/ssl/key.pem`, or it will not start.
+
+Option A — Cloudflare proxy (simplest): set the proxy to **Full (strict)** and
+proxy the subdomains; Cloudflare terminates TLS.
+
+Option B — Let's Encrypt on the VPS:
+
+```bash
+sudo certbot certonly --standalone \
+  -d ssl.mtkcodex.site \
+  -d api.ssl.mtkcodex.site \
+  -d ws.ssl.mtkcodex.site \
+  -d gateway.ssl.mtkcodex.site \
+  --agree-tos -m you@example.com
+
+mkdir -p /opt/mtk-ssl/nginx/ssl
+sudo cp /etc/letsencrypt/live/ssl.mtkcodex.site/fullchain.pem /opt/mtk-ssl/nginx/ssl/cert.pem
+sudo cp /etc/letsencrypt/live/ssl.mtkcodex.site/privkey.pem  /opt/mtk-ssl/nginx/ssl/key.pem
+sudo chmod 644 /opt/mtk-ssl/nginx/ssl/*.pem
+```
+
+Renewal (add to crontab):
+
+```bash
+0 3 1 * * certbot renew --quiet && systemctl reload nginx
 ```
 
 ---
 
-## Step 7: Start All Services
+## Step 5 — DNS
 
-### 7.1 Deploy Microservices
+Add A records pointing at the VPS public IP:
 
-```powershell
-# Start all services in detached mode
-docker-compose -f docker-compose.prod.yml up -d
-
-# This starts: api-gateway, scoring-service, tournament-service, 
-# payment-service, auth-service, notification-service, web, nginx
+```
+ssl.mtkcodex.site         -> <VPS IP>
+api.ssl.mtkcodex.site     -> <VPS IP>
+ws.ssl.mtkcodex.site      -> <VPS IP>
+gateway.ssl.mtkcodex.site -> <VPS IP>
 ```
 
-### 7.2 Check Service Status
+Wait for propagation, then confirm:
 
-```powershell
-# View all running containers
-docker-compose -f docker-compose.prod.yml ps
-
-# Expected output - all should show "Up":
-# ssl-prod-api-gateway        Up 10 seconds   0.0.0.0:3000->3000
-# ssl-prod-scoring-service    Up 10 seconds   0.0.0.0:4002->4002
-# ssl-prod-web                Up 10 seconds   0.0.0.0:3001->3000
-# etc.
+```bash
+curl -s https://api.ssl.mtkcodex.site/api/health
 ```
 
 ---
 
-## Step 8: Verify Deployment
+## Step 6 — Preflight (must pass)
 
-### 8.1 Health Check - API Gateway
-
-```powershell
-# Test API health
-curl http://localhost:3000/api/v1/health
-
-# Expected: {"status":"ok","timestamp":"2024-..."}
+```bash
+cd /opt/mtk-ssl
+bash scripts/preflight.sh
 ```
 
-### 8.2 Health Check - Scoring Service
+This is read-only. It checks tooling, required secrets, placeholder leftovers,
+database target, TLS material, compose validity, and port conflicts.
 
-```powershell
-# Test scoring service
-curl http://localhost:4002/health
-
-# Expected: {"status":"healthy","service":"scoring-service"}
-```
-
-### 8.3 Health Check - Web App
-
-```powershell
-# Test web app
-curl -I http://localhost:3001
-
-# Expected: HTTP/1.1 200 OK
-```
-
-### 8.4 Test WebSocket Connection
-
-```powershell
-# Test WebSocket (install wscat if needed: npm install -g wscat)
-wscat -c ws://localhost:4002/scoring
-
-# Should connect successfully
-```
-
-### 8.5 Open in Browser
-
-Navigate to:
-- **Web App:** http://localhost:3001
-- **API Docs:** http://localhost:3000/api/v1/docs (if available)
-- **API Gateway:** http://localhost:3000
+Fix every `✗` and re-run until it reports `READY — 0 blockers`.
 
 ---
 
-## Step 9: Configure Domain & SSL (Optional)
+## Step 7 — Deploy
 
-If you have a domain name, configure Nginx reverse proxy:
-
-### 9.1 Get SSL Certificates
-
-```powershell
-# Using Let's Encrypt (Certbot)
-# Install certbot first, then:
-certbot certonly --standalone -d yourdomain.com -d api.yourdomain.com -d ws.yourdomain.com
-
-# Copy certificates to nginx folder
-mkdir -p d:\MalikTech\mtk-ssl\nginx\ssl
-copy C:\Certbot\live\yourdomain.com\fullchain.pem d:\MalikTech\mtk-ssl\nginx\ssl\cert.pem
-copy C:\Certbot\live\yourdomain.com\privkey.pem d:\MalikTech\mtk-ssl\nginx\ssl\key.pem
+```bash
+cd /opt/mtk-ssl
+bash deploy-vps.sh --phase all
 ```
 
-### 9.2 Update Nginx Configuration
+This builds all images, starts Redis/Kafka, skips the local Postgres (Supabase is
+external), runs migrations, starts every service, and health-checks them.
 
-Edit `nginx/nginx.conf`:
+Phases, if you need to go narrower:
 
-```nginx
-server_name yourdomain.com;  # Change from localhost
+| Phase | Starts |
+|---|---|
+| `infra` | redis, kafka, zookeeper |
+| `core` | all 10 services + web + nginx |
+| `all` | everything in compose (use this) |
+| `frontend` | web + nginx |
 
-ssl_certificate /etc/nginx/ssl/cert.pem;
-ssl_certificate_key /etc/nginx/ssl/key.pem;
+---
+
+## Step 8 — Verify
+
+```bash
+# Container status
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+
+# Health
+curl -s http://localhost:3000/api/v1/health
+curl -s http://localhost:4000/api/health
+curl -s https://api.ssl.mtkcodex.site/api/health
+
+# Logs for a failing service
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=100 scoring-service
 ```
 
-### 9.3 Restart Nginx
+The deploy aborts if the API gateway or main API fails its health check.
 
-```powershell
-docker-compose -f docker-compose.prod.yml restart nginx
+---
+
+## Step 9 — Frontends (Vercel)
+
+`apps/web` is already linked to a Vercel project. Set these in the Vercel project
+settings (Production):
+
+```
+NEXT_PUBLIC_API_URL=https://api.ssl.mtkcodex.site
+NEXT_PUBLIC_WS_URL=wss://ws.ssl.mtkcodex.site
+NEXT_PUBLIC_SUPABASE_URL=<from Supabase>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<from Supabase>
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<from Clerk>
+NEXT_PUBLIC_SITE_URL=https://ssl.mtkcodex.site
+```
+
+Then link and deploy the other two:
+
+```bash
+cd apps/admin    && npx vercel link && npx vercel --prod
+cd apps/marketing && npx vercel link && npx vercel --prod
 ```
 
 ---
 
-## Step 10: Post-Deployment Tasks
+## Step 10 — Post-deploy
 
-### 10.1 Create Admin User
+1. **Clerk** — add `ssl.mtkcodex.site` to production allowed origins and redirect URLs.
+2. **Stripe** — point the webhook at `https://api.ssl.mtkcodex.site/…` and put the
+   signing secret in `.env.prod`, then `docker compose … restart payment-service`.
+3. **First admin** — create via the auth setup endpoint or the admin app.
+4. **Backups** — Supabase handles these; enable point-in-time recovery.
 
-```powershell
-# Access auth service
-docker exec -it ssl-prod-auth-service sh
+---
 
-# Or use API to create first admin
-curl -X POST http://localhost:3000/api/v1/auth/setup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@yourdomain.com","password":"securepassword"}'
+## Updating later
+
+```bash
+cd /opt/mtk-ssl
+git pull
+bash scripts/preflight.sh
+bash deploy-vps.sh --phase all
 ```
 
-### 10.2 Configure Stripe Webhook
+### Rollback
 
-1. Go to https://dashboard.stripe.com/webhooks
-2. Add endpoint: `https://api.yourdomain.com/payments/webhook`
-3. Select events: `payment_intent.succeeded`, `payment_intent.payment_failed`
-4. Copy webhook secret to `.env.prod`: `STRIPE_WEBHOOK_SECRET`
-5. Restart payment service:
-   ```powershell
-   docker-compose -f docker-compose.prod.yml restart payment-service
-   ```
-
-### 10.3 Set Up Backups (Self-Hosted Only)
-
-```powershell
-# Create backup script
-mkdir -p d:\MalikTech\mtk-ssl\backups
-
-# Add to Windows Task Scheduler or cron
-docker exec ssl-prod-postgres pg_dump -U ssl ssl_prod > d:\MalikTech\mtk-ssl\backups\backup_%date:~-4,4%%date:~-10,2%%date:~-7,2%.sql
-```
-
-### 10.4 Enable Monitoring
-
-```powershell
-# View logs
-docker-compose -f docker-compose.prod.yml logs -f api-gateway
-docker-compose -f docker-compose.prod.yml logs -f scoring-service
-
-# Monitor resource usage
-docker stats
+```bash
+cd /opt/mtk-ssl
+git log --oneline -5
+git reset --hard <previous-good-sha>
+bash deploy-vps.sh --phase all
 ```
 
 ---
 
 ## Troubleshooting
 
-### Issue: "Port already in use"
+**Preflight reports a placeholder secret**
+The value still contains `[Get …]`, `[PROJECT…]` or similar. Paste the real value.
 
-```powershell
-# Find process using port
-Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess
+**Service crash-looping**
+Most often a missing secret. `docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=100 <service>`
+and confirm every variable that service's `src/env.ts` requires is set.
 
-# Stop the process or change port in docker-compose.prod.yml
-```
+**nginx will not start**
+`nginx/ssl/cert.pem` and `key.pem` are missing or unreadable. See Step 4.
 
-### Issue: "Database connection refused"
+**`DATABASE_URL` connection refused**
+Use the Supabase **session pooler** hostname (`aws-0-…pooler.supabase.com:5432`),
+not the direct host. Confirm the password and that the project is not paused.
 
-```powershell
-# Check if Postgres is running
-docker-compose -f docker-compose.prod.yml ps postgres
-
-# View Postgres logs
-docker-compose -f docker-compose.prod.yml logs postgres
-
-# Restart Postgres
-docker-compose -f docker-compose.prod.yml restart postgres
-```
-
-### Issue: "Service unhealthy"
-
-```powershell
-# Check specific service logs
-docker-compose -f docker-compose.prod.yml logs scoring-service
-
-# Restart service
-docker-compose -f docker-compose.prod.yml restart scoring-service
-```
-
-### Issue: "Build failed"
-
-```powershell
-# Clean build cache
-docker-compose -f docker-compose.prod.yml build --no-cache
-
-# Or rebuild specific service
-docker-compose -f docker-compose.prod.yml build --no-cache scoring-service
-```
-
-### Issue: "Out of memory"
-
-```powershell
-# Increase Docker Desktop memory limit
-# Open Docker Desktop → Settings → Resources → Memory → Increase to 8GB
-
-# Or scale down services
-docker-compose -f docker-compose.prod.yml stop analytics-service ai-commentary-service
-```
-
-### Issue: "Migration failed"
-
-```powershell
-# Check database connection
-$env:DATABASE_URL = "your-connection-string"
-pnpm --filter @mtk/database db:check
-
-# Run migrations manually with verbose output
-pnpm --filter @mtk/database db:migrate --verbose
-```
+**Stale env after editing `.env.prod`**
+Containers bake env at start time. Re-run the deploy or `docker compose … up -d --force-recreate`.
 
 ---
 
-## Useful Commands
+## Related
 
-```powershell
-# Start all services
-docker-compose -f docker-compose.prod.yml up -d
-
-# Stop all services
-docker-compose -f docker-compose.prod.yml down
-
-# Restart specific service
-docker-compose -f docker-compose.prod.yml restart scoring-service
-
-# View logs
-docker-compose -f docker-compose.prod.yml logs -f [service-name]
-
-# Scale a service (if configured)
-docker-compose -f docker-compose.prod.yml up -d --scale api-gateway=3
-
-# Update deployment after code changes
-docker-compose -f docker-compose.prod.yml build --no-cache
-docker-compose -f docker-compose.prod.yml up -d
-
-# Clean up unused images
-docker image prune -a
-
-# Access container shell
-docker exec -it ssl-prod-scoring-service sh
-```
-
----
-
-## Next Steps
-
-After successful deployment:
-
-1. **Configure DNS** - Point your domain to server IP
-2. **Set up CI/CD** - Automate deployments with GitHub Actions
-3. **Add monitoring** - Integrate DataDog, New Relic, or Prometheus
-4. **Configure CDN** - Use Cloudflare for static assets
-5. **Set up backups** - Automate database backups to S3
-
----
-
-## Support
-
-If you encounter issues:
-
-1. Check logs: `docker-compose -f docker-compose.prod.yml logs`
-2. Review: `DEPLOYMENT.md` for architecture details
-3. Review: `SUPABASE_SETUP.md` for database help
-4. Review: `ENV_SETUP_GUIDE.md` for credentials help
-
-**Deployment complete!** Your SSL application should now be running at http://localhost:3001
+- `deploy-vps.sh` — canonical deploy script
+- `scripts/preflight.sh` — read-only validation
+- `docker-compose.prod.yml` — service topology
+- `nginx/nginx.conf` — routing and TLS

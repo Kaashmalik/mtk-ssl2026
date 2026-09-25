@@ -7,12 +7,16 @@ services:
   # Infrastructure
   # ============================================
 
-  # NOTE: PostgreSQL can be replaced with Supabase (managed Postgres)
-  # Comment out this service if using Supabase, set DATABASE_URL in .env.prod instead
+  # NOTE: PostgreSQL can be replaced with Supabase (managed Postgres).
+  # This container sits behind the "selfhosted-db" profile so a plain
+  # `docker compose up -d` does NOT start it. Every service reads DATABASE_URL
+  # from the env file, so with Supabase you simply never enable this profile.
+  # To self-host instead:  docker compose --profile selfhosted-db up -d
   postgres:
     image: postgres:17-alpine
     container_name: ssl-prod-postgres
     restart: unless-stopped
+    profiles: ["selfhosted-db"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-ssl}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -124,8 +128,6 @@ services:
     volumes:
       - ssl_certs:/app/certs
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
     networks:
@@ -170,11 +172,10 @@ services:
       NODE_ENV: production
       PORT: 5001
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ssl}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ssl_prod}
+      DATABASE_URL: ${DATABASE_URL}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
     depends_on:
       - redis
-      - postgres
     networks:
       - ssl-prod-network
 
@@ -191,12 +192,11 @@ services:
       PORT: 4002
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:29092
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ssl}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ssl_prod}
+      DATABASE_URL: ${DATABASE_URL}
       SENTRY_DSN: ${SENTRY_DSN}
     depends_on:
       - redis
       - kafka
-      - postgres
     networks:
       - ssl-prod-network
 
@@ -210,10 +210,9 @@ services:
       NODE_ENV: production
       PORT: 5002
       KAFKA_BROKERS: kafka:29092
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ssl}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ssl_prod}
+      DATABASE_URL: ${DATABASE_URL}
     depends_on:
       - kafka
-      - postgres
     networks:
       - ssl-prod-network
 
@@ -225,13 +224,11 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      PORT: 5004
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ssl}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ssl_prod}
+      PORT: 5006
+      DATABASE_URL: ${DATABASE_URL}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       JAZZCASH_MERCHANT_ID: ${JAZZCASH_MERCHANT_ID}
       JAZZCASH_PASSWORD: ${JAZZCASH_PASSWORD}
-    depends_on:
-      - postgres
     networks:
       - ssl-prod-network
 

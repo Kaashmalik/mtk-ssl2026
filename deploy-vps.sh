@@ -26,16 +26,28 @@ error() { echo -e "${RED}[$(date +'%H:%M:%S')] ERROR:${NC} $*" >&2; }
 step()  { echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; echo -e "${BLUE}  ▶ $*${NC}"; echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
 
 # ─── Determine phase ────────────────────────────────────────────────────────
-PHASE="${1:---core}"
-if [[ "$1" == "--phase" ]]; then
+# Safe with zero args (set -u is on): bare `bash deploy-vps.sh` means --phase core.
+PHASE="core"
+if [[ "${1:-}" == "--phase" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    error "--phase requires a value: infra | core | all | frontend"
+    exit 1
+  fi
   PHASE="$2"
+elif [[ -n "${1:-}" ]]; then
+  PHASE="$1"
 fi
 
+# Services that make up a complete backend. `core` deliberately deploys every
+# service in the compose file: partial deploys leave the gateway routing to
+# containers that were never started.
+CORE_SERVICES="api api-gateway auth-service scoring-service tournament-service analytics-service payment-service notification-service ai-commentary-service streaming-service web nginx"
+
 case "$PHASE" in
-  infra)     SERVICES="postgres redis kafka zookeeper" ;;
-  core)      SERVICES="postgres redis kafka zookeeper api api-gateway auth-service scoring-service tournament-service" ;;
+  infra)     SERVICES="redis kafka zookeeper" ;;
+  core)      SERVICES="$CORE_SERVICES" ;;
   all)       SERVICES="" ;;  # empty = everything in compose
-  frontend)  SERVICES="web" ;;
+  frontend)  SERVICES="web nginx" ;;
   *) echo "Usage: bash deploy-vps.sh [--phase infra|core|all|frontend]"; exit 1 ;;
 esac
 
@@ -61,13 +73,41 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Verify critical env vars are set (not still placeholders)
-source "$ENV_FILE"
-CRITICAL_VARS=("DATABASE_URL" "CLERK_SECRET_KEY" "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" "NEXT_PUBLIC_SUPABASE_URL")
+# Verify critical env vars are set (not still placeholders).
+# Read values with a parser instead of `source`-ing the file: the shipped
+# .env.production contains unquoted values with spaces (e.g.
+# `TWILIO_SID=AC_[Get from Twilio Dashboard]`) which make `source` fail partway
+# through and silently leave later variables unset.
+env_get() {
+  local raw
+  raw="$(sed -n -E "s/^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=(.*)\$/\2/p" "$ENV_FILE" | head -n 1)"
+  if [[ "$raw" == \"*\" && "$raw" == *\" ]]; then
+    raw="${raw:1:${#raw}-2}"
+  elif [[ "$raw" == \'*\' && "$raw" == *\' ]]; then
+    raw="${raw:1:${#raw}-2}"
+  fi
+  printf '%s' "$raw"
+}
+
+CRITICAL_VARS=(
+  "DATABASE_URL"
+  "CLERK_SECRET_KEY"
+  "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+  "NEXT_PUBLIC_SUPABASE_URL"
+  "STRIPE_SECRET_KEY"
+  "STRIPE_WEBHOOK_SECRET"
+  # Both of these are enforced by the services themselves: their src/env.ts
+  # throws at import time in production when the value is missing, so the
+  # container would crash-loop on boot without them.
+  "SCORING_GATEWAY_TOKEN"
+  "STREAMING_ACCESS_TOKEN"
+  "MEDIASOUP_ANNOUNCED_IP"
+)
 for var in "${CRITICAL_VARS[@]}"; do
-  VAL="${!var:-}"
-  if [[ -z "$VAL" || "$VAL" == *"[Get"* || "$VAL" == *"\[PROJECT"* ]]; then
-    error "$var is not set in .env.prod (still a placeholder). Edit .env.prod first."
+  VAL="$(env_get "$var")"
+  if [[ -z "$VAL" || "$VAL" == *"[Get"* || "$VAL" == *"[PROJECT"* || "$VAL" == *"[Your"* || "$VAL" == *"[For"* ]]; then
+    error "$var is not set in .env.prod (empty or still a placeholder)."
+    error "  Run: bash scripts/preflight.sh   for the full checklist"
     exit 1
   fi
 done
@@ -84,20 +124,37 @@ fi
 log "Docker images built ✓"
 
 # ─── Phase 2: Start infrastructure ──────────────────────────────────────────
-step "Starting infrastructure (PostgreSQL, Redis, Kafka)"
+step "Starting infrastructure"
 
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d postgres redis kafka zookeeper 2>/dev/null || \
-  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d postgres redis kafka
+# Whether we are using the compose-managed postgres or an external (Supabase)
+# database. The postgres service is profile-gated as "selfhosted-db", so with
+# Supabase there is no local container to wait on.
+USING_EXTERNAL_DB=0
+DB_URL="$(env_get DATABASE_URL)"
+if [[ "$DB_URL" == *"supabase"* || "$DB_URL" == *"@"* && "$DB_URL" != *"@postgres"* && "$DB_URL" != *"@localhost"* && "$DB_URL" != *"@127.0.0.1"* ]]; then
+  USING_EXTERNAL_DB=1
+fi
 
-log "Waiting for PostgreSQL to be ready..."
-for i in {1..30}; do
-  if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U ssl &>/dev/null; then
-    log "PostgreSQL is ready ✓"
-    break
-  fi
-  [[ $i -eq 30 ]] && { error "PostgreSQL failed to start"; exit 1; }
-  sleep 2
-done
+if [[ "$USING_EXTERNAL_DB" -eq 1 ]]; then
+  log "External database detected (${DB_URL%%@*}@…); skipping local postgres ✓"
+else
+  log "Local postgres detected; enabling selfhosted-db profile"
+  SERVICES="postgres $SERVICES"
+fi
+
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d redis kafka zookeeper
+
+if [[ "$USING_EXTERNAL_DB" -eq 0 ]]; then
+  log "Waiting for PostgreSQL to be ready..."
+  for i in {1..30}; do
+    if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready &>/dev/null; then
+      log "PostgreSQL is ready ✓"
+      break
+    fi
+    [[ $i -eq 30 ]] && { error "PostgreSQL failed to start"; exit 1; }
+    sleep 2
+  done
+fi
 
 log "Waiting for Kafka to be ready..."
 sleep 10
@@ -130,9 +187,11 @@ sleep 15
 # ─── Phase 5: Health checks ─────────────────────────────────────────────────
 step "Health checks"
 
+HEALTH_FAILURES=0
 check_health() {
   local name="$1"
   local url="$2"
+  local required="${3:-false}"
   for i in {1..12}; do
     if curl -sf "$url" &>/dev/null; then
       log "  ✓ $name healthy"
@@ -140,14 +199,53 @@ check_health() {
     fi
     sleep 5
   done
-  warn "  ✗ $name not responding at $url (may still be starting)"
+  if [[ "$required" == "true" ]]; then
+    error "  ✗ $name not responding at $url"
+    HEALTH_FAILURES=$((HEALTH_FAILURES+1))
+  else
+    warn "  ✗ $name not responding at $url (may still be starting)"
+  fi
   return 1
 }
 
-check_health "API Gateway"     "http://localhost:3000/api/v1/health"
-check_health "Main API"        "http://localhost:4000/api/health"
+# The API gateway and main API are the only two hard requirements: if they are
+# down the product is unusable. Everything else gets a warning so a slow-starting
+# optional service does not abort an otherwise good deploy.
+check_health "API Gateway"     "http://localhost:3000/api/v1/health"   true
+check_health "Main API"        "http://localhost:4000/api/health"     true
 check_health "Scoring Service" "http://localhost:4002/health"
-check_health "Tournament Svc"  "http://localhost:5002/health"
+check_health "Streaming"       "http://localhost:5008/health"
+
+# The remaining services are internal to the compose network (no published host
+# ports), so they cannot be curled from the host. Verify they are at least
+# running and not crash-looping instead.
+log "Checking internal service containers..."
+for svc in auth-service tournament-service analytics-service payment-service notification-service ai-commentary-service; do
+  cid="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q "$svc" 2>/dev/null || true)"
+  if [[ -z "$cid" ]]; then
+    error "  ✗ $svc is not running"
+    HEALTH_FAILURES=$((HEALTH_FAILURES+1))
+    continue
+  fi
+  state="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo unknown)"
+  restarts="$(docker inspect -f '{{.RestartCount}}' "$cid" 2>/dev/null || echo 0)"
+  if [[ "$state" == "running" ]]; then
+    if [[ "$restarts" -gt 3 ]]; then
+      warn "  ! $svc is running but has restarted $restarts times (crash-looping?)"
+    else
+      log "  ✓ $svc running"
+    fi
+  else
+    error "  ✗ $svc state=$state (restarts=$restarts)"
+    HEALTH_FAILURES=$((HEALTH_FAILURES+1))
+  fi
+done
+
+if [[ $HEALTH_FAILURES -gt 0 ]]; then
+  error "$HEALTH_FAILURES critical service(s) failed health checks. Inspect logs before continuing:"
+  error "  docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=100"
+  exit 1
+fi
 
 # ─── Phase 6: Setup SSL (Nginx + Let's Encrypt) ─────────────────────────────
 if [[ "$PHASE" == "all" || "$PHASE" == "core" ]]; then
