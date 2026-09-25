@@ -22,12 +22,18 @@ export async function POST(request: NextRequest) {
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // Supabase renamed the client-safe key from "anon" to "publishable"; accept
+    // either so a project seeded from the current Supabase dashboard works.
+    const supabaseKey =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
 
     if (!supabaseUrl || !supabaseKey) {
       const missing = [
         !supabaseUrl ? "NEXT_PUBLIC_SUPABASE_URL" : null,
-        !supabaseKey ? "NEXT_PUBLIC_SUPABASE_ANON_KEY" : null,
+        !supabaseKey
+          ? "NEXT_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+          : null,
       ].filter(Boolean);
       console.error(`[waitlist] Not configured. Missing: ${missing.join(", ")}`);
       return NextResponse.json(
