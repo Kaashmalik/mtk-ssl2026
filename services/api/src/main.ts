@@ -5,14 +5,12 @@ import { env } from "./env";
 import * as Sentry from "@sentry/node";
 
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe, VersioningType } from "@nestjs/common";
-import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Logger } from "nestjs-pino";
 import { closeDbConnection } from "@mtk/database";
-import { isOriginAllowed, refreshCorsOrigins } from "./common/cors/tenant-cors";
-import express from "express";
+import { refreshCorsOrigins } from "./common/cors/tenant-cors";
+import { configureApp } from "./app.setup";
 
 /**
  * Bootstrap the NestJS application
@@ -33,38 +31,7 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
 
   app.enableShutdownHooks();
-  app.use(helmet({ contentSecurityPolicy: false }));
-  app.getHttpAdapter().getInstance().disable("x-powered-by");
-  app.use(express.json({ limit: env.BODY_MAX_BYTES }));
-  app.use(express.urlencoded({ extended: true, limit: env.BODY_MAX_BYTES }));
-
-  // Enable CORS
-  app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      const allowed = isOriginAllowed(origin);
-      callback(allowed ? null : new Error("CORS blocked"), allowed);
-    },
-    credentials: true,
-  });
-
-  // Global validation pipe
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: true },
-      stopAtFirstError: true,
-    })
-  );
-
-  // Global prefix
-  app.setGlobalPrefix("api");
-  app.enableVersioning({
-    type: VersioningType.HEADER,
-    header: "x-api-version",
-    defaultVersion: "1",
-  });
+  configureApp(app);
 
   if (env.NODE_ENV !== "production") {
     const config = new DocumentBuilder()

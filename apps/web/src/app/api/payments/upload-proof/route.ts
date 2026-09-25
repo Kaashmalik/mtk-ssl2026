@@ -11,6 +11,8 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createSupabaseServerClient } from "@mtk/database";
+import { captureError } from "@mtk/observability";
+import { featureReadiness } from "@/lib/env";
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -69,9 +71,21 @@ export async function POST(req: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!supabaseUrl || !serviceKey) {
-    console.error("[upload-proof] Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    const { missing } = featureReadiness("paymentsUpload");
+    await captureError(
+      new Error(`Payment proof upload unavailable: missing ${missing.join(", ")}`),
+      {
+        level: "error",
+        context: { service: "web" },
+        tags: { source: "upload-proof", feature: "paymentsUpload" },
+      },
+    );
     return NextResponse.json(
-      { error: "Upload service is not configured" },
+      {
+        error: "Receipt upload is temporarily unavailable.",
+        detail: `Server is missing ${missing.join(", ")}.`,
+        missing,
+      },
       { status: 503 },
     );
   }

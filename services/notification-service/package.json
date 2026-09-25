@@ -9,7 +9,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,test}/**/*.ts\"",
-    "test": "npx jest --passWithNoTests",
+    "test": "npx jest",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
     "@nestjs/microservices": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
     "firebase-admin": "^13.0.0",
+    "helmet": "^8.0.0",
     "kafkajs": "^2.2.4",
     "nodemailer": "^6.10.0",
     "reflect-metadata": "^0.2.2",

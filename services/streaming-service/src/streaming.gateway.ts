@@ -12,7 +12,7 @@ import { Logger } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
 import { MediasoupRouterService } from './mediasoup-router.service';
 import { StreamingService } from './streaming.service';
-import { env } from './env';
+import { env, corsAllowlist } from './env';
 import * as mediasoup from 'mediasoup';
 
 interface ClientData {
@@ -23,7 +23,7 @@ interface ClientData {
 
 @WebSocketGateway({
   namespace: 'streaming',
-  cors: { origin: env.CORS_ORIGIN.split(','), credentials: true },
+  cors: { origin: corsAllowlist(), credentials: true },
 })
 export class StreamingGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;

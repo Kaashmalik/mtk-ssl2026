@@ -3,6 +3,7 @@ import './env';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { Logger } from '@nestjs/common';
+import helmet from 'helmet';
 import { join } from 'path';
 import { PaymentModule } from './payment.module';
 
@@ -13,6 +14,8 @@ async function bootstrap() {
   const app = await NestFactory.create(PaymentModule, {
     rawBody: true,
   });
+
+  app.use(helmet());
 
   // Connect gRPC Microservice
   app.connectMicroservice<MicroserviceOptions>({

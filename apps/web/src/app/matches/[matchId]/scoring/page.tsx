@@ -5,12 +5,26 @@ import { useParams } from "next/navigation";
 import { useScoringStore, BallInput, type InningsState } from "@/stores/scoring-store";
 import { BallInputComponent } from "@/components/scoring/ball-input";
 import { LiveScorecard } from "@/components/scoring/live-scorecard";
-import { ManhattanChart } from "@/components/scoring/manhattan-chart";
-import { WagonWheel } from "@/components/scoring/wagon-wheel";
-import { WormChart } from "@/components/scoring/worm-chart";
 import { DLSCalculator } from "@/components/scoring/dls-calculator";
 import { PlayerSelector } from "@/components/scoring/player-selector";
 import { VoiceInput } from "@/components/scoring/voice-input";
+import dynamic from "next/dynamic";
+import { Skeleton } from "@mtk/ui/components/ui/skeleton";
+
+const ChartFallback = () => <Skeleton className="h-72 w-full rounded-xl" />;
+
+const ManhattanChart = dynamic(
+  () => import("@/components/scoring/manhattan-chart").then((m) => m.ManhattanChart),
+  { ssr: false, loading: ChartFallback }
+);
+const WagonWheel = dynamic(
+  () => import("@/components/scoring/wagon-wheel").then((m) => m.WagonWheel),
+  { ssr: false, loading: ChartFallback }
+);
+const WormChart = dynamic(
+  () => import("@/components/scoring/worm-chart").then((m) => m.WormChart),
+  { ssr: false, loading: ChartFallback }
+);
 import { Button } from "@mtk/ui";
 import { Card } from "@mtk/ui";
 import { Undo2, Redo2, Wifi, WifiOff, Zap, Loader2, AlertCircle } from "lucide-react";

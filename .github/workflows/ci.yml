@@ -38,7 +38,9 @@ jobs:
         run: pnpm type-check
 
       - name: Run Unit Tests
-        run: pnpm --filter @mtk/web test
+        # Runs every workspace's test task (turbo also builds dependencies first),
+        # so no service can ship with a silently skipped test suite.
+        run: pnpm turbo run test
 
       - name: Build Web App
         run: pnpm --filter @mtk/web build
@@ -47,8 +49,17 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
           SENTRY_UPLOAD: "0"
 
-      - name: Run API Unit Tests
-        run: pnpm --filter @mtk/api test
+      - name: Build Admin App
+        run: pnpm --filter @mtk/admin build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          SENTRY_UPLOAD: "0"
+
+      - name: Build Marketing App
+        run: pnpm --filter @mtk/marketing build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          SENTRY_UPLOAD: "0"
 
       - name: Run API E2E Tests
         run: pnpm --filter @mtk/api test:e2e

@@ -27,6 +27,7 @@ export function WicketSelector({ onSelect, onCancel }: WicketSelectorProps) {
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Cancel wicket selection"
             onClick={onCancel}
             className="h-8 w-8"
           >

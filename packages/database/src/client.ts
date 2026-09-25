@@ -45,7 +45,6 @@ function resolveDatabaseUrl(): string {
   }
   try {
     // postgres.js / URL parser reject template connection strings
-    // eslint-disable-next-line no-new
     new URL(raw);
     return raw;
   } catch {

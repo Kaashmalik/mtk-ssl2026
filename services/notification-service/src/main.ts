@@ -2,6 +2,7 @@ import './env';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { Logger } from '@nestjs/common';
+import helmet from 'helmet';
 import { NotificationModule } from './notification.module';
 
 async function bootstrap() {
@@ -9,6 +10,7 @@ async function bootstrap() {
 
   // HTTP Server for webhooks
   const app = await NestFactory.create(NotificationModule);
+  app.use(helmet());
   
   // Connect Kafka consumer
   app.connectMicroservice<MicroserviceOptions>({

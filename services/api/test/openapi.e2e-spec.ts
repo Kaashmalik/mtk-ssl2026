@@ -2,6 +2,7 @@ import { Test } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "../src/app.module";
+import { configureApp } from "../src/app.setup";
 
 describe("OpenAPI contract (e2e)", () => {
   let app: INestApplication;
@@ -12,6 +13,7 @@ describe("OpenAPI contract (e2e)", () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
+    configureApp(app);
     await app.init();
   });
 

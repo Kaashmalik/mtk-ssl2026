@@ -9,7 +9,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,test}/**/*.ts\"",
-    "test": "jest --passWithNoTests",
+    "test": "jest",
     "test:cov": "jest --coverage",
     "type-check": "tsc --noEmit"
   },
@@ -22,6 +22,7 @@
     "@nestjs/microservices": "^11.1.0",
     "@sentry/node": "^9.47.1",
     "express": "^4.21.1",
+    "helmet": "^8.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "stripe": "^17.7.0",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useMatchStore } from "@/store/match-store";
@@ -92,11 +92,6 @@ export default function MobileScoringScreen() {
     };
 
     addPendingBall(ballRecord);
-
-    if (Platform.OS !== "web") {
-      // Trigger simple haptic placeholder or log
-      console.log("Ball recorded: ", ballRecord);
-    }
   };
 
   const handleUndo = () => {

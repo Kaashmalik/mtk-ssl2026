@@ -3,6 +3,7 @@ import { HealthRegistry, pingPostgres, healthResponse, type HealthResponse } fro
 import { db } from "@mtk/database";
 import { users } from "@mtk/database";
 import { captureError, getRequestLogger } from "@mtk/observability";
+import { featureReadiness } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,22 @@ export async function GET() {
       }
     },
   });
+
+  // Feature readiness probes — configuration only, no network I/O.
+  // A missing key is "degraded", never "down": rollupStatus() turns any
+  // "down" probe into a 503, which would take the liveness probe with it.
+  for (const feature of ["paymentsUpload", "email", "streaming", "commentary"] as const) {
+    registry.add({
+      name: `feature:${feature}`,
+      critical: false,
+      run: async () => {
+        const { ready, missing } = featureReadiness(feature);
+        return ready
+          ? { status: "healthy", message: "configured" }
+          : { status: "degraded", message: `missing: ${missing.join(", ")}` };
+      },
+    });
+  }
 
   try {
     const result = await registry.run();

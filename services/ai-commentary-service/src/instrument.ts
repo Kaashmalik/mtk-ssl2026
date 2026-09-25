@@ -23,8 +23,7 @@ if (dsn) {
     ),
   });
 } else if (isProdLike) {
-  // eslint-disable-next-line no-console
   console.warn(
-    `[instrument] SENTRY_DSN unset — error monitoring disabled (env=${environment})`,
+    `[instrument] SENTRY_DSN unset - error monitoring disabled (env=${environment})`,
   );
 }

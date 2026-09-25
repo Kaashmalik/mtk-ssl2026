@@ -24,7 +24,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { TournamentFormData } from "../tournament-wizard"
 import { useLanguage } from "@/hooks/use-language"
 
-interface StepSeedingProps {
+export interface StepSeedingProps {
   form: UseFormReturn<TournamentFormData>
 }
 

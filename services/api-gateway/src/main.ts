@@ -22,8 +22,13 @@ async function bootstrap() {
   }));
 
   // CORS configuration
+  const corsAllowlist = (configService.get<string>('CORS_ORIGINS', ''))
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0 && origin !== '*');
+
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGINS', '*').split(','),
+    origin: corsAllowlist.length > 0 ? corsAllowlist : nodeEnv === 'production' ? false : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
     maxAge: 86400,

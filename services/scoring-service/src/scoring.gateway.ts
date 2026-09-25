@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { ScoringService } from './scoring.service';
 import { Logger } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
+import { corsAllowlist } from './env';
 
 interface BallEvent {
   matchId: string;
@@ -34,7 +35,7 @@ interface BallEvent {
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGINS?.split(',') || '*',
+    origin: corsAllowlist(),
     credentials: true,
   },
   namespace: '/scoring',

@@ -31,6 +31,20 @@ vi.mock("@mtk/database", () => {
     update: vi.fn().mockReturnThis(),
     set: vi.fn().mockReturnThis(),
   };
+
+  const playerRepo = {
+    insertOne: vi.fn().mockImplementation(async () => mockDb.insert(null).values(null).returning()[0]),
+    updateById: vi.fn().mockResolvedValue(undefined),
+    deleteById: vi.fn().mockResolvedValue(undefined),
+    findById: vi.fn().mockResolvedValue(null),
+    findMany: vi.fn().mockResolvedValue([]),
+    count: vi.fn().mockResolvedValue(0),
+  };
+
+  const teamRepo = {
+    findById: vi.fn().mockResolvedValue(null),
+  };
+
   return {
     db: mockDb,
     tenants: { id: "tenants_id", ownerId: "owner_id", slug: "slug" },
@@ -38,6 +52,18 @@ vi.mock("@mtk/database", () => {
     players: { id: "players_id", tenantId: "tenant_id", name: "name" },
     teams: { id: "teams_id", tenantId: "tenant_id", name: "name" },
     matches: { id: "matches_id", tenantId: "tenant_id" },
+    tournaments: { id: "tournaments_id", tenantId: "tenant_id" },
+    subscriptions: {
+      id: "subscriptions_id",
+      tenantId: "tenant_id",
+      plan: "plan",
+      status: "status",
+    },
+    users: { id: "users_id", tenantId: "tenant_id" },
+    playerRepo,
+    teamRepo,
+    withTenantContext: vi.fn().mockImplementation(async (_ctx, fn) => fn()),
+    withoutTenantContext: vi.fn().mockImplementation(async (fn) => fn()),
   };
 });
 

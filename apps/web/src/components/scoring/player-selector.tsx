@@ -106,6 +106,7 @@ export function PlayerSelector({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Close player selector"
                 onClick={() => {
                   setShowSelector(false);
                   setSelectingFor(null);

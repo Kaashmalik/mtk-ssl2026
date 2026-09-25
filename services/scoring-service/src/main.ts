@@ -2,16 +2,19 @@ import './env';
 import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import helmet from 'helmet';
 import { ScoringModule } from './scoring.module';
-import { env } from './env';
+import { env, corsAllowlist } from './env';
 
 async function bootstrap() {
   // Create HTTP application
   const app = await NestFactory.create(ScoringModule);
 
+  app.use(helmet());
+
   // Enable CORS for WebSocket connections
   app.enableCors({
-    origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:3001'],
+    origin: corsAllowlist(),
     credentials: true,
   });
 

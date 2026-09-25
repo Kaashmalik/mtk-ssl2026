@@ -25,10 +25,17 @@ export async function POST(request: NextRequest) {
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      console.error("Supabase credentials not configured");
+      const missing = [
+        !supabaseUrl ? "NEXT_PUBLIC_SUPABASE_URL" : null,
+        !supabaseKey ? "NEXT_PUBLIC_SUPABASE_ANON_KEY" : null,
+      ].filter(Boolean);
+      console.error(`[waitlist] Not configured. Missing: ${missing.join(", ")}`);
       return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
+        {
+          error: "Waitlist is temporarily unavailable. Please try again later.",
+          missing,
+        },
+        { status: 503 }
       );
     }
 

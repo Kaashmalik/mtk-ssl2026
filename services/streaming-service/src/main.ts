@@ -1,12 +1,14 @@
 import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import helmet from 'helmet';
 import { StreamingModule } from './streaming.module';
-import { env } from './env';
+import { env, corsAllowlist } from './env';
 
 async function bootstrap() {
   const app = await NestFactory.create(StreamingModule);
-  app.enableCors({ origin: env.CORS_ORIGIN.split(','), credentials: true });
+  app.use(helmet());
+  app.enableCors({ origin: corsAllowlist(), credentials: true });
 
   // Kafka consumer for streaming commands
   app.connectMicroservice<MicroserviceOptions>({

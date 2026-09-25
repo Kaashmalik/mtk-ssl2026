@@ -12,8 +12,15 @@ import { StepMatchType } from "./steps/step-match-type"
 import { StepTournamentDetails } from "./steps/step-tournament-details"
 import { StepRegistration } from "./steps/step-registration"
 import { StepSchedule } from "./steps/step-schedule"
-import { StepSeeding } from "./steps/step-seeding"
+import type { StepSeedingProps } from "./steps/step-seeding"
 import { StepBranding } from "./steps/step-branding"
+import { Skeleton } from "@mtk/ui/components/ui/skeleton"
+import dynamic from "next/dynamic"
+
+const StepSeeding = dynamic<StepSeedingProps>(
+  () => import("./steps/step-seeding").then((m) => m.StepSeeding),
+  { ssr: false, loading: () => <Skeleton className="h-72 w-full rounded-xl" /> }
+)
 import { CompletionScreen } from "./completion-screen"
 import { useLanguage } from "@/hooks/use-language"
 import { CopyFromPrevious } from "./copy-from-previous"

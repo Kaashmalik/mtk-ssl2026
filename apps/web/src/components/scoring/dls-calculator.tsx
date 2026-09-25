@@ -60,6 +60,7 @@ export function DLSCalculator({
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Close DLS calculator"
             onClick={() => setIsOpen(false)}
           >
             <X className="h-4 w-4" />

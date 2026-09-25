@@ -162,7 +162,7 @@ export function Header({ userRole }: { userRole?: UserRole }) {
         </Button>
 
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
           <Bell className="h-4 w-4" />
           <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-live text-[10px] font-bold text-white flex items-center justify-center">
             3
